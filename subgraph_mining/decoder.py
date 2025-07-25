@@ -879,11 +879,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 framealpha=0.95,
                 title="Graph Elements",
                 fontsize=legend_fontsize,
-                title_fontsize=legend_fontsize + 1,
                 fancybox=True,
                 shadow=True,
                 ncol=ncol
             )
+            legend.get_title().set_fontsize(legend_fontsize + 1)
             
             # Adjust layout to accommodate legend
             if edge_density > 0.5:
