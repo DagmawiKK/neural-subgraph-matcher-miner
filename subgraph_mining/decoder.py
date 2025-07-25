@@ -451,11 +451,12 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         num_edges = pattern.number_of_edges()
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
-        base_size = max(12, min(20, num_nodes * 2))
+        # Improved figure sizing that scales better with larger patterns
+        base_size = max(12, min(30, num_nodes * 1.5))  # Increased max size and better scaling
         if edge_density > 0.3:  # Dense graph
-            figsize = (base_size * 1.2, base_size)
+            figsize = (base_size * 1.3, base_size * 1.1)  # More space for dense graphs
         else:
-            figsize = (base_size, base_size * 0.8)
+            figsize = (base_size * 1.1, base_size)
         
         plt.figure(figsize=figsize)
 
@@ -493,22 +494,33 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             else:  
                 node_labels[n] = "\n".join(label_parts)
 
-        if edge_density > 0.5:  # Very dense - use hierarchical layout
-            if num_nodes <= 15:
-                pos = nx.circular_layout(pattern, scale=4)
+        # Improved layout algorithm that scales better with larger patterns
+        if edge_density > 0.5:  # Very dense
+            if num_nodes <= 12:
+                pos = nx.circular_layout(pattern, scale=max(3, num_nodes * 0.3))
+            elif num_nodes <= 25:
+                # Use spring layout with better parameters for medium-large dense graphs
+                pos = nx.spring_layout(pattern, k=max(2.0, num_nodes * 0.15), seed=42, iterations=200)
             else:
-                # Try hierarchical layout for better clarity
+                # For very large dense graphs, try hierarchical first, then fall back
                 try:
-                    pos = nx.nx_agraph.graphviz_layout(pattern, prog='dot')
+                    pos = nx.nx_agraph.graphviz_layout(pattern, prog='neato')
                 except:
-                    pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=150)
+                    pos = nx.spring_layout(pattern, k=max(3.0, num_nodes * 0.12), seed=42, iterations=300)
         elif edge_density > 0.3:  # Dense
-            if num_nodes <= 20:
-                pos = nx.circular_layout(pattern, scale=3.5)
+            if num_nodes <= 15:
+                pos = nx.circular_layout(pattern, scale=max(2.5, num_nodes * 0.25))
+            elif num_nodes <= 35:
+                pos = nx.spring_layout(pattern, k=max(2.0, num_nodes * 0.12), seed=42, iterations=150)
             else:
-                pos = nx.spring_layout(pattern, k=3.5, seed=42, iterations=120)
+                # For large dense graphs
+                pos = nx.spring_layout(pattern, k=max(2.5, num_nodes * 0.1), seed=42, iterations=250)
         else:  # Sparse
-            pos = nx.spring_layout(pattern, k=2.5, seed=42, iterations=80)
+            if num_nodes <= 50:
+                pos = nx.spring_layout(pattern, k=max(1.5, num_nodes * 0.08), seed=42, iterations=100)
+            else:
+                # For very large sparse graphs
+                pos = nx.spring_layout(pattern, k=max(2.0, num_nodes * 0.06), seed=42, iterations=200)
 
         unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
         label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
@@ -521,14 +533,21 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         shapes = []
         node_list = list(pattern.nodes())
         
-        if edge_density > 0.5:  # Very dense
-            base_node_size = 2500
+        # Improved node sizing that scales better with larger patterns
+        if num_nodes > 50:  # Very large graphs
+            base_node_size = max(800, 3000 // num_nodes * 10)
+            anchor_node_size = base_node_size * 1.2
+        elif num_nodes > 25:  # Large graphs
+            base_node_size = max(1200, 4000 // num_nodes * 15)
+            anchor_node_size = base_node_size * 1.2
+        elif edge_density > 0.5:  # Very dense
+            base_node_size = max(1500, 5000 // num_nodes * 20)
             anchor_node_size = base_node_size * 1.3
         elif edge_density > 0.3:  # Dense
-            base_node_size = 3500
+            base_node_size = max(2000, 6000 // num_nodes * 25)
             anchor_node_size = base_node_size * 1.2
         else:  # Sparse
-            base_node_size = 5000
+            base_node_size = max(2500, 8000 // num_nodes * 30)
             anchor_node_size = base_node_size * 1.2
         
         for i, node in enumerate(node_list):
@@ -652,19 +671,65 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                                      if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
         
-        if edge_density > 0.5:  
-            font_size = max(6, min(9, 150 // (num_nodes + max_attrs_per_node * 5)))
-        elif edge_density > 0.3:  
-            font_size = max(7, min(10, 200 // (num_nodes + max_attrs_per_node * 3)))
-        else:  
-            font_size = max(8, min(12, 250 // (num_nodes + max_attrs_per_node * 2)))
+        # Improved font sizing that scales better with larger patterns
+        if num_nodes > 50:  # Very large graphs
+            font_size = max(4, min(7, 200 // num_nodes))
+        elif num_nodes > 25:  # Large graphs
+            font_size = max(5, min(8, 300 // num_nodes))
+        elif edge_density > 0.5:  # Very dense
+            font_size = max(6, min(9, 400 // (num_nodes + max_attrs_per_node * 3)))
+        elif edge_density > 0.3:  # Dense
+            font_size = max(7, min(10, 500 // (num_nodes + max_attrs_per_node * 2)))
+        else:  # Sparse
+            font_size = max(8, min(12, 600 // (num_nodes + max_attrs_per_node)))
         
+        # Improved node label positioning to prevent overlaps
+        def adjust_positions_for_overlap(pos, node_labels, min_distance=0.3):
+            """Adjust node positions to prevent label overlaps"""
+            adjusted_pos = pos.copy()
+            nodes = list(pos.keys())
+            
+            # Only adjust for smaller graphs where overlap is more likely
+            if num_nodes > 30:
+                return adjusted_pos
+                
+            for i, node1 in enumerate(nodes):
+                for j, node2 in enumerate(nodes[i+1:], i+1):
+                    x1, y1 = adjusted_pos[node1]
+                    x2, y2 = adjusted_pos[node2]
+                    
+                    distance = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+                    
+                    if distance < min_distance:
+                        # Calculate adjustment vector
+                        if distance > 0:
+                            dx = (x2 - x1) / distance
+                            dy = (y2 - y1) / distance
+                        else:
+                            dx, dy = 0.1, 0.1
+                        
+                        # Move nodes apart
+                        adjustment = (min_distance - distance) / 2
+                        adjusted_pos[node1] = (x1 - dx * adjustment, y1 - dy * adjustment)
+                        adjusted_pos[node2] = (x2 + dx * adjustment, y2 + dy * adjustment)
+            
+            return adjusted_pos
+        
+        # Adjust positions to prevent overlaps
+        if num_nodes < 50:  # Only for manageable sizes
+            pos = adjust_positions_for_overlap(pos, node_labels, 
+                                             min_distance=0.4 if num_nodes < 20 else 0.25)
+        
+        # Draw node labels with improved spacing
         for node, (x, y) in pos.items():
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
             
-            if edge_density > 0.5:
+            # Adjust padding based on graph size and density
+            if num_nodes > 40:
+                pad = 0.1
+            elif edge_density > 0.5:
                 pad = 0.15
             elif edge_density > 0.3:
                 pad = 0.2
@@ -683,9 +748,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     fontweight='bold' if is_anchor else 'normal',
                     color='black',
                     ha='center', va='center',
-                    bbox=bbox_props)
+                    bbox=bbox_props,
+                    zorder=5)  # Ensure labels appear above edges
 
-        if edge_density < 0.5 and num_edges < 25:
+        # Improved edge label handling to prevent overlaps
+        if edge_density < 0.4 and num_edges < 20 and num_nodes < 30:  # More restrictive conditions
             edge_labels = {}
             for u, v, data in pattern.edges(data=True):
                 edge_type = (data.get('type') or 
@@ -694,16 +761,37 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                            data.get('relation') or
                            data.get('edge_type'))
                 if edge_type:
-                    edge_labels[(u, v)] = str(edge_type)
+                    # Truncate long edge labels to prevent overlap
+                    if len(str(edge_type)) > 8:
+                        edge_labels[(u, v)] = str(edge_type)[:6] + ".."
+                    else:
+                        edge_labels[(u, v)] = str(edge_type)
 
             if edge_labels:
-                edge_font_size = max(5, font_size - 2)
-                nx.draw_networkx_edge_labels(pattern, pos, 
-                          edge_labels=edge_labels, 
-                          font_size=edge_font_size, 
-                          font_color='black',
-                          bbox=dict(facecolor='white', edgecolor='lightgray', 
-                                  alpha=0.8, boxstyle='round,pad=0.1'))
+                edge_font_size = max(4, font_size - 3)  # Smaller font for edge labels
+                
+                # Calculate better positions for edge labels to avoid overlaps
+                edge_label_pos = {}
+                for (u, v), label in edge_labels.items():
+                    # Get midpoint between nodes
+                    x1, y1 = pos[u]
+                    x2, y2 = pos[v]
+                    
+                    # Offset the label slightly to avoid overlap with edge
+                    offset = 0.1 if edge_density < 0.2 else 0.05
+                    edge_label_pos[(u, v)] = ((x1 + x2) / 2 + offset, (y1 + y2) / 2 + offset)
+                
+                # Draw edge labels with better positioning
+                for (u, v), label in edge_labels.items():
+                    x, y = edge_label_pos[(u, v)]
+                    plt.text(x, y, label,
+                            fontsize=edge_font_size,
+                            fontweight='normal',
+                            color='black',
+                            ha='center', va='center',
+                            bbox=dict(facecolor='white', edgecolor='lightgray', 
+                                    alpha=0.9, boxstyle='round,pad=0.05'),
+                            zorder=10)  # Higher z-order to appear on top
 
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
         has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())
@@ -791,12 +879,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 framealpha=0.95,
                 title="Graph Elements",
                 fontsize=legend_fontsize,
+                title_fontsize=legend_fontsize + 1,
                 fancybox=True,
                 shadow=True,
                 ncol=ncol
             )
-
-            legend.get_title().set_fontsize(legend_fontsize + 1) 
             
             # Adjust layout to accommodate legend
             if edge_density > 0.5:
@@ -995,7 +1082,7 @@ def pattern_growth(dataset, task, args):
     
     successful_visualizations = 0
     for pattern in out_graphs:
-        if visualize_pattern_graph(pattern, args, count_by_size):
+        if visualize_pattern_graph_new(pattern, args, count_by_size):
             successful_visualizations += 1
         count_by_size[len(pattern)] += 1
 
