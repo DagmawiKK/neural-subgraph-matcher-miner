@@ -449,14 +449,18 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
     try:
         num_nodes = len(pattern)
         num_edges = pattern.number_of_edges()
+        print(f"[LOG] Visualizing pattern with {num_nodes} nodes and {num_edges} edges.")
+
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
-        
+        print(f"[LOG] Edge density: {edge_density:.3f}")
+   
         base_size = max(12, min(20, num_nodes * 2))
         if edge_density > 0.3:  # Dense graph
             figsize = (base_size * 1.2, base_size)
         else:
             figsize = (base_size, base_size * 0.8)
-        
+        print(f"[LOG] Figure size: {figsize}")
+
         plt.figure(figsize=figsize)
 
         node_labels = {}
@@ -492,6 +496,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 node_labels[n] = "; ".join(label_parts)
             else:  
                 node_labels[n] = "\n".join(label_parts)
+        print(f"[LOG] Node labels generated for all nodes.")
 
         # Simplified layout algorithm similar to original but with improvements
         if edge_density > 0.3:
@@ -504,9 +509,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
 
         unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
         label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
+        print(f"[LOG] Unique node labels: {unique_labels}")
 
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
+        print(f"[LOG] Unique edge types: {unique_edge_types}")
 
         colors = []
         node_sizes = []
@@ -537,6 +544,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 colors.append(label_color_map[node_label])
                 node_sizes.append(base_node_size)
                 shapes.append('o')
+        print(f"[LOG] Node colors, sizes, and shapes assigned.")
 
         anchor_nodes = []
         regular_nodes = []
@@ -554,8 +562,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 regular_nodes.append(node)
                 regular_colors.append(colors[i])
                 regular_sizes.append(node_sizes[i])
+        print(f"[LOG] Anchor nodes: {anchor_nodes}, Regular nodes: {regular_nodes}")
 
         if anchor_nodes:
+            print(f"[LOG] Drawing anchor nodes.")
+
             nx.draw_networkx_nodes(pattern, pos, 
                     nodelist=anchor_nodes,
                     node_color=anchor_colors, 
@@ -584,7 +595,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         else:  
             edge_width = 3
             edge_alpha = 0.8
-        
+        print(f"[LOG] Edge width: {edge_width}, Edge alpha: {edge_alpha}")
+
         if pattern.is_directed():
             # Improved arrow sizing and connection styles for dense graphs
             if edge_density > 0.5:  # Very dense
@@ -601,6 +613,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 min_margin = 15
             
             # Group edges by type for better rendering
+            print(f"[LOG] Drawing directed edges with arrow_size={arrow_size}, connectionstyle={connectionstyle}")
+
             edges_by_type = {}
             for u, v, data in pattern.edges(data=True):
                 edge_type = data.get('type', 'default')
@@ -627,6 +641,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     min_target_margin=min_margin
                 )
         else:
+            print(f"[LOG] Drawing undirected edges.")
+
             for u, v, data in pattern.edges(data=True):
                 edge_type = data.get('type', 'default')
                 edge_color = edge_color_map[edge_type]
@@ -679,6 +695,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     color='black',
                     ha='center', va='center',
                     bbox=bbox_props)
+        print(f"[LOG] Node labels drawn.")
+
 
         # Simplified edge label handling similar to original
         if edge_density < 0.5 and num_edges < 25:
@@ -834,7 +852,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
         plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
         plt.close()
-        
+        print(f"[LOG] Visualization complete for pattern with {num_nodes} nodes.")
+
         return True
     except Exception as e:
         print(f"Error visualizing pattern graph: {e}")
