@@ -72,7 +72,7 @@ def parse_decoder(parser):
         skip="learnable",
         graph_type="undirected",
         min_pattern_size=5,
-        max_pattern_size=10,
+        max_pattern_size=20,
         min_neighborhood_size=5,
         max_neighborhood_size=10,
         search_strategy="greedy",
