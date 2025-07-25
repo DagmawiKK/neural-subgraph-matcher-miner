@@ -451,76 +451,103 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         num_edges = pattern.number_of_edges()
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
-        base_size = max(12, min(24, num_nodes * 1.5))
-        if num_nodes > 30 or edge_density > 0.3:
-            figsize = (base_size * 1.3, base_size)
+        # Adaptive figure sizing
+        base_size = max(14, min(28, num_nodes * 1.8))
+        if num_nodes > 25 or edge_density > 0.4:
+            figsize = (base_size * 1.4, base_size * 1.1)
         else:
-            figsize = (base_size, base_size * 0.8)
-        plt.figure(figsize=figsize)
+            figsize = (base_size, base_size * 0.9)
+        
+        fig, ax = plt.subplots(figsize=figsize)
 
+        # Build node labels with smart truncation
         node_labels = {}
         for n in pattern.nodes():
             node_data = pattern.nodes[n]
             node_id = node_data.get('id', str(n))
             node_label = node_data.get('label', 'unknown')
             
-            label_parts = [f"{node_label}:{node_id}"]
+            # Start with basic label
+            if num_nodes > 20:
+                # For large graphs, use compact format
+                label_parts = [f"{node_label}:{node_id}"]
+            else:
+                label_parts = [f"{node_label}:{node_id}"]
             
+            # Add other attributes with smart truncation
             other_attrs = {k: v for k, v in node_data.items() 
                           if k not in ['id', 'label', 'anchor'] and v is not None}
             
             if other_attrs:
                 for key, value in other_attrs.items():
                     if isinstance(value, str):
-                        if edge_density > 0.5 and len(value) > 8:  
-                            value = value[:5] + "..."
-                        elif edge_density > 0.3 and len(value) > 12: 
-                            value = value[:9] + "..."
-                        elif len(value) > 15: 
-                            value = value[:12] + "..."
+                        # More aggressive truncation for large/dense graphs
+                        if num_nodes > 25 or edge_density > 0.5:
+                            value = value[:4] + "..." if len(value) > 4 else value
+                        elif num_nodes > 15 or edge_density > 0.3:
+                            value = value[:7] + "..." if len(value) > 7 else value
+                        else:
+                            value = value[:12] + "..." if len(value) > 12 else value
                     elif isinstance(value, (int, float)):
                         if isinstance(value, float):
-                            value = f"{value:.2f}" if abs(value) < 1000 else f"{value:.1e}"
+                            value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
                     
-                    if edge_density > 0.5: 
+                    # Compact format for large graphs
+                    if num_nodes > 20:
                         label_parts.append(f"{key}:{value}")
-                    else:  
+                    else:
                         label_parts.append(f"{key}: {value}")
             
-            if edge_density > 0.5:  
+            # Join labels appropriately
+            if num_nodes > 20:
                 node_labels[n] = "; ".join(label_parts)
-            else:  
+            else:
                 node_labels[n] = "\n".join(label_parts)
 
-        if edge_density > 0.3:
-            if num_nodes <= 20:
-                pos = nx.circular_layout(pattern, scale=3)
+        # Smart layout selection
+        if num_nodes > 30:
+            # For very large graphs, use hierarchical layout if directed
+            if pattern.is_directed():
+                try:
+                    pos = nx.nx_agraph.graphviz_layout(pattern, prog='dot')
+                except:
+                    pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
             else:
-                pos = nx.spring_layout(pattern, k=3.0, seed=42, iterations=100)
+                pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
+        elif edge_density > 0.4 or num_nodes > 20:
+            if num_nodes <= 25:
+                pos = nx.circular_layout(pattern, scale=4)
+            else:
+                pos = nx.spring_layout(pattern, k=3.5, seed=42, iterations=150)
         else:
-            pos = nx.spring_layout(pattern, k=2.0, seed=42, iterations=50)
+            pos = nx.spring_layout(pattern, k=2.5, seed=42, iterations=100)
 
+        # Color mapping
         unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
         label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
 
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
 
+        # Adaptive node sizing - fixed the main issue
+        if num_nodes > 30:
+            base_node_size = 3000
+            anchor_node_size = base_node_size * 1.3
+        elif num_nodes > 20 or edge_density > 0.5:
+            base_node_size = 3500
+            anchor_node_size = base_node_size * 1.3
+        elif edge_density > 0.3:
+            base_node_size = 4000
+            anchor_node_size = base_node_size * 1.2
+        else:
+            base_node_size = 5000
+            anchor_node_size = base_node_size * 1.2
+
+        # Prepare node attributes
         colors = []
         node_sizes = []
         shapes = []
         node_list = list(pattern.nodes())
-        
-        # Node sizes
-        if edge_density > 0.5:  # Very dense
-            base_node_size = 1200
-            anchor_node_size = base_node_size * 1.2
-        elif edge_density > 0.3 or num_nodes > 30:  # Dense or large
-            base_node_size = 1800
-            anchor_node_size = base_node_size * 1.2
-        else:  # Sparse
-            base_node_size = 2500
-            anchor_node_size = base_node_size * 1.2
         
         for i, node in enumerate(node_list):
             node_data = pattern.nodes[node]
@@ -536,6 +563,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 node_sizes.append(base_node_size)
                 shapes.append('o')
 
+        # Separate anchor and regular nodes for drawing
         anchor_nodes = []
         regular_nodes = []
         anchor_colors = []
@@ -553,16 +581,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 regular_colors.append(colors[i])
                 regular_sizes.append(node_sizes[i])
 
-        if anchor_nodes:
-            nx.draw_networkx_nodes(pattern, pos, 
-                    nodelist=anchor_nodes,
-                    node_color=anchor_colors, 
-                    node_size=anchor_sizes, 
-                    node_shape='s',
-                    edgecolors='black', 
-                    linewidths=3,
-                    alpha=0.9)
-
+        # Draw nodes
         if regular_nodes:
             nx.draw_networkx_nodes(pattern, pos, 
                     nodelist=regular_nodes,
@@ -573,19 +592,42 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     linewidths=2,
                     alpha=0.8)
 
-        if edge_density > 0.5 or num_nodes > 30:
-            edge_width = 1.2
-            edge_alpha = 0.5
+        if anchor_nodes:
+            nx.draw_networkx_nodes(pattern, pos, 
+                    nodelist=anchor_nodes,
+                    node_color=anchor_colors, 
+                    node_size=anchor_sizes, 
+                    node_shape='s',
+                    edgecolors='darkred', 
+                    linewidths=3,
+                    alpha=0.9)
+
+        # Adaptive edge styling
+        if num_nodes > 30:
+            edge_width = 1.0
+            edge_alpha = 0.4
+        elif num_nodes > 20 or edge_density > 0.5:
+            edge_width = 1.5
+            edge_alpha = 0.6
         elif edge_density > 0.3:
-            edge_width = 1.8
+            edge_width = 2.0
             edge_alpha = 0.7
         else:
             edge_width = 2.5
             edge_alpha = 0.8
         
+        # Draw edges
         if pattern.is_directed():
-            arrow_size = 30 if edge_density < 0.3 else (20 if edge_density < 0.5 else 15)
-            connectionstyle = "arc3,rad=0.1" if edge_density < 0.5 else "arc3,rad=0.15"
+            # Adaptive arrow sizing
+            if num_nodes > 30:
+                arrow_size = 15
+                connectionstyle = "arc3,rad=0.2"
+            elif num_nodes > 20:
+                arrow_size = 20
+                connectionstyle = "arc3,rad=0.15"
+            else:
+                arrow_size = 25
+                connectionstyle = "arc3,rad=0.1"
             
             for u, v, data in pattern.edges(data=True):
                 edge_type = data.get('type', 'default')
@@ -601,9 +643,9 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     arrowsize=arrow_size,
                     arrowstyle='-|>',
                     connectionstyle=connectionstyle,
-                    node_size=max(node_sizes) * 1.3,
-                    min_source_margin=15,
-                    min_target_margin=15
+                    node_size=max(node_sizes) * 1.2,
+                    min_source_margin=10,
+                    min_target_margin=10
                 )
         else:
             for u, v, data in pattern.edges(data=True):
@@ -616,37 +658,41 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     width=edge_width,
                     edge_color=[edge_color],
                     alpha=edge_alpha,
-                    arrows=False  
+                    arrows=False
                 )
 
-        
+        # Adaptive font sizing
         max_attrs_per_node = max(len([k for k in pattern.nodes[n].keys() 
                                      if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
         
-        if edge_density > 0.5:  
-            font_size = max(6, min(9, 150 // (num_nodes + max_attrs_per_node * 5)))
-        elif edge_density > 0.3:  
-            font_size = max(7, min(10, 200 // (num_nodes + max_attrs_per_node * 3)))
-        else:  
-            font_size = max(8, min(12, 250 // (num_nodes + max_attrs_per_node * 2)))
+        if num_nodes > 30:
+            font_size = max(6, min(8, 120 // (num_nodes + max_attrs_per_node * 3)))
+        elif num_nodes > 20:
+            font_size = max(7, min(9, 160 // (num_nodes + max_attrs_per_node * 4)))
+        elif edge_density > 0.5:
+            font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
+        else:
+            font_size = max(9, min(12, 250 // (num_nodes + max_attrs_per_node * 2)))
         
+        # Draw node labels
         for node, (x, y) in pos.items():
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
             
-            if edge_density > 0.5:
+            # Adaptive padding
+            if num_nodes > 25:
+                pad = 0.1
+            elif num_nodes > 15:
                 pad = 0.15
-            elif edge_density > 0.3:
-                pad = 0.2
             else:
-                pad = 0.3
+                pad = 0.25
             
             bbox_props = dict(
-                facecolor='lightcoral' if is_anchor else (1, 0.8, 0.8, 0.6),
-                edgecolor='darkred' if is_anchor else 'gray',
-                alpha=0.8,
+                facecolor='lightcoral' if is_anchor else 'lightblue',
+                edgecolor='darkred' if is_anchor else 'navy',
+                alpha=0.9 if is_anchor else 0.7,
                 boxstyle=f'round,pad={pad}'
             )
             
@@ -657,7 +703,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     ha='center', va='center',
                     bbox=bbox_props)
 
-        if edge_density < 0.5 and num_edges < 25:
+        # Draw edge labels for smaller, less dense graphs
+        if num_nodes <= 25 and edge_density < 0.4 and num_edges < 30:
             edge_labels = {}
             for u, v, data in pattern.edges(data=True):
                 edge_type = (data.get('type') or 
@@ -665,18 +712,19 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                            data.get('input_label') or
                            data.get('relation') or
                            data.get('edge_type'))
-                if edge_type:
+                if edge_type and len(str(edge_type)) <= 15:  # Don't show very long edge labels
                     edge_labels[(u, v)] = str(edge_type)
 
             if edge_labels:
-                edge_font_size = max(5, font_size - 2)
+                edge_font_size = max(6, font_size - 2)
                 nx.draw_networkx_edge_labels(pattern, pos, 
                           edge_labels=edge_labels, 
                           font_size=edge_font_size, 
-                          font_color='black',
+                          font_color='darkblue',
                           bbox=dict(facecolor='white', edgecolor='lightgray', 
                                   alpha=0.8, boxstyle='round,pad=0.1'))
 
+        # Create comprehensive title
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
         has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())
         anchor_info = " (Red squares = anchor nodes)" if has_anchors else ""
@@ -684,7 +732,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         total_node_attrs = sum(len([k for k in pattern.nodes[n].keys() 
                                   if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                              for n in pattern.nodes())
-        attr_info = f", {total_node_attrs} total node attrs" if total_node_attrs > 0 else ""
+        attr_info = f", {total_node_attrs} total attrs" if total_node_attrs > 0 else ""
         
         density_info = f"Density: {edge_density:.2f}"
         if edge_density > 0.5:
@@ -695,46 +743,80 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             density_info += " (Sparse)"
         
         title = f"{graph_type} Pattern Graph{anchor_info}\n"
-        title += f"(Size: {num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
+        title += f"({num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
         
-        plt.title(title, fontsize=14, fontweight='bold')
+        plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold', pad=20)
         plt.axis('off')
 
-        if unique_edge_types and len(unique_edge_types) > 1:
-            x_pos = 1.2  
-            y_pos = 1.0  
-            
-            edge_legend_elements = [
-                plt.Line2D([0], [0], 
-                          color=color, 
-                          linewidth=3, 
-                          label=f'{edge_type}')
-                for edge_type, color in edge_color_map.items()
-            ]
-            
-            legend = plt.legend(
-                handles=edge_legend_elements,
-                loc='upper left',
-                bbox_to_anchor=(x_pos, y_pos),
-                borderaxespad=0.,
-                framealpha=0.9,
-                title="Edge Types",
-                fontsize=9
+        # Create legends
+        legend_elements = []
+        
+        # Node type legend
+        if len(unique_labels) > 1:
+            for label, color in label_color_map.items():
+                legend_elements.append(
+                    plt.Line2D([0], [0], marker='o', color='w', 
+                              markerfacecolor=color, markersize=10, 
+                              label=f'Node: {label}', markeredgecolor='black')
+                )
+        
+        # Add anchor node to legend if present
+        if has_anchors:
+            legend_elements.append(
+                plt.Line2D([0], [0], marker='s', color='w', 
+                          markerfacecolor='red', markersize=12, 
+                          label='Anchor Node', markeredgecolor='darkred', linewidth=2)
             )
-            legend.get_title().set_fontsize(10)
-            
-            plt.tight_layout(rect=[0, 0, 0.85, 1])
+        
+        # Edge type legend
+        if len(unique_edge_types) > 1:
+            for edge_type, color in edge_color_map.items():
+                if edge_type != 'default':  # Skip default edges unless they're the only type
+                    legend_elements.append(
+                        plt.Line2D([0], [0], color=color, linewidth=3, 
+                                  label=f'Edge: {edge_type}')
+                    )
+        
+        # Position legend based on graph size
+        if legend_elements:
+            if num_nodes > 25:
+                # For large graphs, put legend outside
+                legend = plt.legend(
+                    handles=legend_elements,
+                    loc='center left',
+                    bbox_to_anchor=(1.02, 0.5),
+                    borderaxespad=0.,
+                    framealpha=0.95,
+                    title="Graph Elements",
+                    fontsize=9,
+                    title_fontsize=10
+                )
+                plt.tight_layout(rect=[0, 0, 0.82, 1])
+            else:
+                # For smaller graphs, put legend in upper right corner
+                legend = plt.legend(
+                    handles=legend_elements,
+                    loc='upper right',
+                    bbox_to_anchor=(0.98, 0.98),
+                    borderaxespad=0.,
+                    framealpha=0.95,
+                    title="Graph Elements",
+                    fontsize=9,
+                    title_fontsize=10
+                )
+                plt.tight_layout()
         else:
             plt.tight_layout()
 
+        # Generate filename
         pattern_info = [f"{num_nodes}-{count_by_size[num_nodes]}"]
 
-        node_types = sorted(set(pattern.nodes[n].get('label', '') for n in pattern.nodes()))
-        if any(node_types):
+        node_types = sorted(set(pattern.nodes[n].get('label', '') for n in pattern.nodes() if pattern.nodes[n].get('label', '')))
+        if node_types:
             pattern_info.append('nodes-' + '-'.join(node_types))
 
-        edge_types = sorted(set(pattern.edges[e].get('type', '') for e in pattern.edges()))
-        if any(edge_types):
+        edge_types = sorted(set(pattern.edges[e].get('type', '') for e in pattern.edges() if pattern.edges[e].get('type', '')))
+        if edge_types:
             pattern_info.append('edges-' + '-'.join(edge_types))
 
         if has_anchors:
@@ -753,6 +835,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         graph_type_short = "dir" if pattern.is_directed() else "undir"
         filename = f"{graph_type_short}_{('_'.join(pattern_info))}"
 
+        # Save plots
         plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
         plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
         plt.close()
@@ -760,6 +843,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         return True
     except Exception as e:
         print(f"Error visualizing pattern graph: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
