@@ -445,24 +445,28 @@ def visualize_pattern_graph(pattern, args, count_by_size):
         print(f"Error visualizing pattern graph: {e}")
         return False
     
-def visualize_pattern_graph_with_plotly(pattern, args, count_by_size):
-
-    import plotly.graph_objects as go
-    import plotly.colors
-
+def visualize_pattern_graph_new(pattern, args, count_by_size):
     try:
         num_nodes = len(pattern)
         num_edges = pattern.number_of_edges()
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
 
-        # Layout: spring for large, circular for small dense
+        # Adjust figure size for large/dense graphs
+        base_size = max(12, min(24, num_nodes * 1.5))
+        if edge_density > 0.3 or num_nodes > 30:
+            figsize = (base_size * 1.2, base_size)
+        else:
+            figsize = (base_size, base_size * 0.8)
+        plt.figure(figsize=figsize)
+
+        # Layout
         if edge_density > 0.3 and num_nodes <= 20:
             pos = nx.circular_layout(pattern, scale=3)
         else:
             k = 2.5 if num_nodes < 30 else 4.0
             pos = nx.spring_layout(pattern, k=k, seed=42, iterations=100)
 
-        # Node labels and attributes
+        # Node labels and colors
         node_labels = {}
         for n in pattern.nodes():
             node_data = pattern.nodes[n]
@@ -476,166 +480,106 @@ def visualize_pattern_graph_with_plotly(pattern, args, count_by_size):
                 elif isinstance(value, float):
                     value = f"{value:.2f}" if abs(value) < 1000 else f"{value:.1e}"
                 label_parts.append(f"{key}: {value}")
-            node_labels[n] = "<br>".join(label_parts)
+            node_labels[n] = "\n".join(label_parts)
 
-        # Node colors and shapes
         unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
-        color_palette = plotly.colors.qualitative.Set3
-        label_color_map = {label: color_palette[i % len(color_palette)] for i, label in enumerate(unique_labels)}
+        label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
 
-        node_x, node_y, node_text, node_color, node_shape = [], [], [], [], []
-        anchor_nodes_x, anchor_nodes_y, anchor_nodes_text = [], [], []
-        anchor_nodes_color = []
-        for n in pattern.nodes():
-            x, y = pos[n]
-            node_x.append(x)
-            node_y.append(y)
-            node_text.append(node_labels[n])
-            node_label = pattern.nodes[n].get('label', 'unknown')
-            is_anchor = pattern.nodes[n].get('anchor', 0) == 1
-            if is_anchor:
-                anchor_nodes_x.append(x)
-                anchor_nodes_y.append(y)
-                anchor_nodes_text.append(node_labels[n])
-                anchor_nodes_color.append('red')
-            else:
-                node_color.append(label_color_map[node_label])
-                node_shape.append('circle')
-
-        # Edge colors
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
-        edge_palette = plotly.colors.qualitative.Dark24
-        edge_color_map = {edge_type: edge_palette[i % len(edge_palette)] for i, edge_type in enumerate(unique_edge_types)}
+        edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
 
-        edge_x, edge_y, edge_colors, edge_text = [], [], [], []
+        # Node drawing
+        node_colors = [label_color_map[pattern.nodes[n].get('label', 'unknown')] for n in pattern.nodes()]
+        anchor_nodes = [n for n in pattern.nodes() if pattern.nodes[n].get('anchor', 0) == 1]
+        regular_nodes = [n for n in pattern.nodes() if n not in anchor_nodes]
+        node_sizes = [1800 if n in anchor_nodes else 1200 for n in pattern.nodes()]
+
+        nx.draw_networkx_nodes(pattern, pos, nodelist=regular_nodes,
+                              node_color=[node_colors[i] for i, n in enumerate(pattern.nodes()) if n in regular_nodes],
+                              node_size=[node_sizes[i] for i, n in enumerate(pattern.nodes()) if n in regular_nodes],
+                              node_shape='o', edgecolors='black', linewidths=1.5, alpha=0.85)
+        if anchor_nodes:
+            nx.draw_networkx_nodes(pattern, pos, nodelist=anchor_nodes,
+                                  node_color='red', node_size=2000,
+                                  node_shape='s', edgecolors='darkred', linewidths=2.5, alpha=0.95)
+
+        # Edge drawing
         for u, v, data in pattern.edges(data=True):
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            edge_x += [x0, x1, None]
-            edge_y += [y0, y1, None]
             edge_type = data.get('type', 'default')
-            edge_colors.append(edge_color_map[edge_type])
-            edge_text.append(str(edge_type))
-
-        # Plotly traces
-        edge_trace = go.Scatter(
-            x=edge_x, y=edge_y,
-            line=dict(width=2, color='#888'),
-            hoverinfo='none',
-            mode='lines'
-        )
-
-        # Node trace (regular nodes)
-        node_trace = go.Scatter(
-            x=node_x, y=node_y,
-            mode='markers+text',
-            marker=dict(
-                color=node_color,
-                size=18,
-                line=dict(width=2, color='black'),
-                symbol='circle'
-            ),
-            text=node_text,
-            textposition="top center",
-            hoverinfo='text',
-            name='Nodes'
-        )
-
-        # Anchor node trace (red squares)
-        anchor_trace = go.Scatter(
-            x=anchor_nodes_x, y=anchor_nodes_y,
-            mode='markers+text',
-            marker=dict(
-                color=anchor_nodes_color,
-                size=22,
-                line=dict(width=3, color='darkred'),
-                symbol='square'
-            ),
-            text=anchor_nodes_text,
-            textposition="top center",
-            hoverinfo='text',
-            name='Anchors'
-        )
-
-        # Legends for node types
-        node_legend_traces = []
-        for label, color in label_color_map.items():
-            node_legend_traces.append(
-                go.Scatter(
-                    x=[None], y=[None],
-                    mode='markers',
-                    marker=dict(color=color, size=14, symbol='circle'),
-                    legendgroup=label,
-                    showlegend=True,
-                    name=f"Node: {label}"
-                )
-            )
-        # Legend for anchor nodes
-        node_legend_traces.append(
-            go.Scatter(
-                x=[None], y=[None],
-                mode='markers',
-                marker=dict(color='red', size=16, symbol='square'),
-                legendgroup='anchor',
-                showlegend=True,
-                name="Anchor Node"
-            )
-        )
-        # Legends for edge types
-        edge_legend_traces = []
-        for edge_type, color in edge_color_map.items():
-            edge_legend_traces.append(
-                go.Scatter(
-                    x=[None], y=[None],
-                    mode='lines',
-                    line=dict(color=color, width=4),
-                    legendgroup=edge_type,
-                    showlegend=True,
-                    name=f"Edge: {edge_type}"
-                )
+            edge_color = edge_color_map[edge_type]
+            nx.draw_networkx_edges(
+                pattern, pos,
+                edgelist=[(u, v)],
+                width=2,
+                edge_color=[edge_color],
+                alpha=0.7,
+                arrows=pattern.is_directed(),
+                arrowsize=18,
+                arrowstyle='-|>' if pattern.is_directed() else '-'
             )
 
-        graph_type = "Directed" if pattern.is_directed() else "Undirected"
-        has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())
-        anchor_info = " (Red squares = anchor nodes)" if has_anchors else ""
-        total_node_attrs = sum(len([k for k in pattern.nodes[n].keys() if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) for n in pattern.nodes())
-        attr_info = f", {total_node_attrs} total node attrs" if total_node_attrs > 0 else ""
-        density_info = f"Density: {edge_density:.2f}"
-        if edge_density > 0.5:
-            density_info += " (Very Dense)"
-        elif edge_density > 0.3:
-            density_info += " (Dense)"
-        else:
-            density_info += " (Sparse)"
-        title = f"{graph_type} Pattern Graph{anchor_info}<br>(Size: {num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
-
-        # Compose figure
-        fig = go.Figure(
-            data=[edge_trace, node_trace, anchor_trace] + node_legend_traces + edge_legend_traces,
-            layout=go.Layout(
-                title=title,
-                titlefont=dict(size=18),
-                showlegend=True,
-                hovermode='closest',
-                margin=dict(b=20, l=5, r=5, t=60),
-                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                legend=dict(font=dict(size=12), orientation="v")
+        # Node labels
+        font_size = max(7, min(12, 200 // (num_nodes + 1)))
+        for node, (x, y) in pos.items():
+            label = node_labels[node]
+            is_anchor = pattern.nodes[node].get('anchor', 0) == 1
+            bbox_props = dict(
+                facecolor='lightcoral' if is_anchor else (1, 0.8, 0.8, 0.6),
+                edgecolor='darkred' if is_anchor else 'gray',
+                alpha=0.8,
+                boxstyle='round,pad=0.2'
             )
-        )
+            plt.text(x, y, label, fontsize=font_size, fontweight='bold' if is_anchor else 'normal',
+                     color='black', ha='center', va='center', bbox=bbox_props)
 
-        # Save or show
-        if getattr(args, "interactive", False):
-            fig.show()
-        else:
-            filename = f"plots/cluster/{'dir' if pattern.is_directed() else 'undir'}_{num_nodes}_nodes_{num_edges}_edges"
-            fig.write_image(f"{filename}.png", width=1200, height=900)
-            fig.write_image(f"{filename}.pdf", width=1200, height=900)
+        # Edge labels (if not too dense)
+        if edge_density < 0.5 and num_edges < 25:
+            edge_labels = {}
+            for u, v, data in pattern.edges(data=True):
+                edge_type = (data.get('type') or data.get('label') or data.get('input_label') or
+                             data.get('relation') or data.get('edge_type'))
+                if edge_type:
+                    edge_labels[(u, v)] = str(edge_type)
+            if edge_labels:
+                nx.draw_networkx_edge_labels(pattern, pos, edge_labels=edge_labels,
+                                            font_size=max(6, font_size - 2), font_color='black',
+                                            bbox=dict(facecolor='white', edgecolor='lightgray',
+                                                      alpha=0.8, boxstyle='round,pad=0.1'))
+
+        # Edge color legend (always shown if >1 edge type)
+        if len(unique_edge_types) > 1:
+            edge_legend_elements = [
+                plt.Line2D([0], [0], color=color, linewidth=3, label=f'{edge_type}')
+                for edge_type, color in edge_color_map.items()
+            ]
+            legend = plt.legend(
+                handles=edge_legend_elements,
+                loc='upper left',
+                bbox_to_anchor=(1.02, 1),
+                borderaxespad=0.,
+                framealpha=0.9,
+                title="Edge Types",
+                fontsize=9
+            )
+            legend.get_title().set_fontsize(10)
+
+        plt.title(f"{'Directed' if pattern.is_directed() else 'Undirected'} Pattern Graph\n"
+                  f"(Size: {num_nodes} nodes, {num_edges} edges, Density: {edge_density:.2f})",
+                  fontsize=14, fontweight='bold')
+        plt.axis('off')
+        plt.tight_layout(rect=[0, 0, 0.85, 1])
+
+        # Save
+        graph_type_short = "dir" if pattern.is_directed() else "undir"
+        filename = f"{graph_type_short}_{num_nodes}_nodes_{num_edges}_edges"
+        plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
+        plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
+        plt.close()
         return True
     except Exception as e:
         print(f"Error visualizing pattern graph: {e}")
         return False
-
+    
 def pattern_growth(dataset, task, args):
     start_time = time.time()
     if args.method_type == "end2end":
@@ -786,7 +730,7 @@ def pattern_growth(dataset, task, args):
     
     successful_visualizations = 0
     for pattern in out_graphs:
-        if visualize_pattern_graph_with_plotly(pattern, args, count_by_size):
+        if visualize_pattern_graph_new(pattern, args, count_by_size):
             successful_visualizations += 1
         count_by_size[len(pattern)] += 1
 

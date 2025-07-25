@@ -62,6 +62,4 @@ RUN pip install --no-cache-dir \
     test-tube==0.7.5 \
     tqdm==4.43.0
 
-RUN pip install --no-cache-dir plotly>=5.0.0 kaleido>=0.2.1
-
 COPY . .
