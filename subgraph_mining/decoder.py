@@ -451,12 +451,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         num_edges = pattern.number_of_edges()
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
-        # Improved figure sizing that scales better with larger patterns
-        base_size = max(12, min(30, num_nodes * 1.5))  # Increased max size and better scaling
+        base_size = max(12, min(20, num_nodes * 2))
         if edge_density > 0.3:  # Dense graph
-            figsize = (base_size * 1.3, base_size * 1.1)  # More space for dense graphs
+            figsize = (base_size * 1.2, base_size)
         else:
-            figsize = (base_size * 1.1, base_size)
+            figsize = (base_size, base_size * 0.8)
         
         plt.figure(figsize=figsize)
 
@@ -788,13 +787,12 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 framealpha=0.95,
                 title="Graph Elements",
                 fontsize=legend_fontsize,
+                title_fontsize=legend_fontsize + 1,
                 fancybox=True,
                 shadow=True,
                 ncol=ncol
             )
-
-            legend.get_title().set_fontsize(legend_fontsize + 1)
-                        
+            
             # Adjust layout to accommodate legend
             if edge_density > 0.5:
                 if ncol == 2:
