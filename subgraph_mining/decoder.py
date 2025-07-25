@@ -728,48 +728,84 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         plt.title(title, fontsize=14, fontweight='bold')
         plt.axis('off')
 
-        # Always show edge legend for better clarity, especially in dense graphs
+        # Create legends for both nodes and edges for better clarity
+        legend_elements = []
+        
+        # Node legend elements
+        if len(unique_labels) > 1 or has_anchors:
+            # Regular node types
+            for node_label, color in label_color_map.items():
+                legend_elements.append(
+                    plt.Line2D([0], [0], marker='o', color='w', 
+                              markerfacecolor=color, markersize=10, 
+                              markeredgecolor='black', markeredgewidth=1,
+                              label=f'Node: {node_label}', linestyle='None')
+                )
+            
+            # Anchor nodes if they exist
+            if has_anchors:
+                legend_elements.append(
+                    plt.Line2D([0], [0], marker='s', color='w', 
+                              markerfacecolor='red', markersize=10, 
+                              markeredgecolor='black', markeredgewidth=2,
+                              label='Anchor Node', linestyle='None')
+                )
+        
+        # Edge legend elements
         if unique_edge_types:
-            # Adjust legend position based on graph density
+            for edge_type, color in edge_color_map.items():
+                legend_elements.append(
+                    plt.Line2D([0], [0], color=color, linewidth=3, 
+                              label=f'Edge: {edge_type}')
+                )
+        
+        # Show combined legend if we have elements
+        if legend_elements:
+            # Adjust legend position and size based on graph density
             if edge_density > 0.5:  # Very dense - place legend more carefully
-                x_pos = 1.15
-                y_pos = 0.95
-                legend_fontsize = 8
+                x_pos = 1.12
+                y_pos = 0.98
+                legend_fontsize = 7
+                ncol = 1
             elif edge_density > 0.3:  # Dense
-                x_pos = 1.2
+                x_pos = 1.15
                 y_pos = 1.0
-                legend_fontsize = 9
+                legend_fontsize = 8
+                ncol = 1
             else:  # Sparse
                 x_pos = 1.2
                 y_pos = 1.0
                 legend_fontsize = 9
+                ncol = 1
             
-            edge_legend_elements = [
-                plt.Line2D([0], [0], 
-                          color=color, 
-                          linewidth=3, 
-                          label=f'{edge_type}')
-                for edge_type, color in edge_color_map.items()
-            ]
+            # If we have many legend items, use multiple columns for very dense graphs
+            if len(legend_elements) > 6 and edge_density > 0.5:
+                ncol = 2
+                x_pos = 1.05
             
             legend = plt.legend(
-                handles=edge_legend_elements,
+                handles=legend_elements,
                 loc='upper left',
                 bbox_to_anchor=(x_pos, y_pos),
                 borderaxespad=0.,
                 framealpha=0.95,
-                title="Edge Types",
+                title="Graph Elements",
                 fontsize=legend_fontsize,
                 fancybox=True,
-                shadow=True
+                shadow=True,
+                ncol=ncol
             )
-            legend.get_title().set_fontsize(legend_fontsize + 1)
+
+            legend.get_title().set_fontsize(legend_fontsize + 1) 
             
             # Adjust layout to accommodate legend
             if edge_density > 0.5:
-                plt.tight_layout(rect=[0, 0, 0.82, 1])
+                if ncol == 2:
+                    plt.tight_layout(rect=[0, 0, 0.75, 1])
+                else:
+                    plt.tight_layout(rect=[0, 0, 0.80, 1])
             else:
-                plt.tight_layout(rect=[0, 0, 0.85, 1])
+                plt.tight_layout(rect=[0, 0, 0.83, 1])
         else:
             plt.tight_layout()
        
