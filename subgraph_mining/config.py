@@ -71,7 +71,7 @@ def parse_decoder(parser):
         sample_method="tree",
         skip="learnable",
         graph_type="undirected",
-        min_pattern_size=10,
+        min_pattern_size=15,
         max_pattern_size=20,
         min_neighborhood_size=5,
         max_neighborhood_size=10,
