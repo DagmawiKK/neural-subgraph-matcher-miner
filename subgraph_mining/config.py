@@ -74,7 +74,7 @@ def parse_decoder(parser):
         min_pattern_size=15,
         max_pattern_size=20,
         min_neighborhood_size=5,
-        max_neighborhood_size=10,
+        max_neighborhood_size=20,
         search_strategy="greedy",
         out_batch_size=10,
         node_anchored=True,
