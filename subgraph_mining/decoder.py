@@ -701,44 +701,30 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         plt.title(title, fontsize=14, fontweight='bold')
         plt.axis('off')
 
-        # Node legend
-        legend_elements = []
-        for node_label, color in label_color_map.items():
-            legend_elements.append(
-                plt.Line2D([0], [0], marker='o', color='w',
-                        markerfacecolor=color, markersize=10,
-                        markeredgecolor='black', markeredgewidth=1,
-                        label=f'Node: {node_label}', linestyle='None')
-            )
-        if anchor_nodes:
-            legend_elements.append(
-                plt.Line2D([0], [0], marker='s', color='w',
-                        markerfacecolor='red', markersize=10,
-                        markeredgecolor='black', markeredgewidth=2,
-                        label='Anchor Node', linestyle='None')
-            )
-        # Edge legend
-        for edge_type, color in edge_color_map.items():
-            legend_elements.append(
-                plt.Line2D([0], [0], color=color, linewidth=3,
-                        label=f'Edge: {edge_type}')
-            )
-
-        if legend_elements:
+        if unique_edge_types and len(unique_edge_types) > 1:
+            x_pos = 1.2  
+            y_pos = 1.0  
+            
+            edge_legend_elements = [
+                plt.Line2D([0], [0], 
+                          color=color, 
+                          linewidth=3, 
+                          label=f'{edge_type}')
+                for edge_type, color in edge_color_map.items()
+            ]
+            
             legend = plt.legend(
-                handles=legend_elements,
+                handles=edge_legend_elements,
                 loc='upper left',
-                bbox_to_anchor=(1.02, 1),
+                bbox_to_anchor=(x_pos, y_pos),
                 borderaxespad=0.,
-                framealpha=0.95,
-                title="Graph Elements",
-                fontsize=font_size+1,
-                fancybox=True,
-                shadow=True,
-                ncol=1
+                framealpha=0.9,
+                title="Edge Types",
+                fontsize=9
             )
-            legend.get_title().set_fontsize(font_size+2)
-            plt.tight_layout(rect=[0, 0, 0.83, 1])
+            legend.get_title().set_fontsize(10)
+            
+            plt.tight_layout(rect=[0, 0, 0.85, 1])
         else:
             plt.tight_layout()
 
