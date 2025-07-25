@@ -445,141 +445,6 @@ def visualize_pattern_graph(pattern, args, count_by_size):
         print(f"Error visualizing pattern graph: {e}")
         return False
     
-
-    try:
-        num_nodes = len(pattern)
-        num_edges = pattern.number_of_edges()
-        edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
-
-        # Adjust figure size for large/dense graphs
-        base_size = max(12, min(24, num_nodes * 1.5))
-        if edge_density > 0.3 or num_nodes > 30:
-            figsize = (base_size * 1.2, base_size)
-        else:
-            figsize = (base_size, base_size * 0.8)
-        plt.figure(figsize=figsize)
-
-        # Layout
-        if edge_density > 0.3 and num_nodes <= 20:
-            pos = nx.circular_layout(pattern, scale=3)
-        else:
-            k = 2.5 if num_nodes < 30 else 4.0
-            pos = nx.spring_layout(pattern, k=k, seed=42, iterations=100)
-
-        # Node labels and colors
-        node_labels = {}
-        for n in pattern.nodes():
-            node_data = pattern.nodes[n]
-            node_id = node_data.get('id', str(n))
-            node_label = node_data.get('label', 'unknown')
-            label_parts = [f"{node_label}:{node_id}"]
-            other_attrs = {k: v for k, v in node_data.items() if k not in ['id', 'label', 'anchor'] and v is not None}
-            for key, value in other_attrs.items():
-                if isinstance(value, str) and len(value) > 12:
-                    value = value[:9] + "..."
-                elif isinstance(value, float):
-                    value = f"{value:.2f}" if abs(value) < 1000 else f"{value:.1e}"
-                label_parts.append(f"{key}: {value}")
-            node_labels[n] = "\n".join(label_parts)
-
-        unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
-        label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
-
-        unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
-        edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
-
-        # Node drawing
-        node_colors = [label_color_map[pattern.nodes[n].get('label', 'unknown')] for n in pattern.nodes()]
-        anchor_nodes = [n for n in pattern.nodes() if pattern.nodes[n].get('anchor', 0) == 1]
-        regular_nodes = [n for n in pattern.nodes() if n not in anchor_nodes]
-        node_sizes = [1800 if n in anchor_nodes else 1200 for n in pattern.nodes()]
-
-        nx.draw_networkx_nodes(pattern, pos, nodelist=regular_nodes,
-                              node_color=[node_colors[i] for i, n in enumerate(pattern.nodes()) if n in regular_nodes],
-                              node_size=[node_sizes[i] for i, n in enumerate(pattern.nodes()) if n in regular_nodes],
-                              node_shape='o', edgecolors='black', linewidths=1.5, alpha=0.85)
-        if anchor_nodes:
-            nx.draw_networkx_nodes(pattern, pos, nodelist=anchor_nodes,
-                                  node_color='red', node_size=2000,
-                                  node_shape='s', edgecolors='darkred', linewidths=2.5, alpha=0.95)
-
-        # Edge drawing
-        for u, v, data in pattern.edges(data=True):
-            edge_type = data.get('type', 'default')
-            edge_color = edge_color_map[edge_type]
-            nx.draw_networkx_edges(
-                pattern, pos,
-                edgelist=[(u, v)],
-                width=2,
-                edge_color=[edge_color],
-                alpha=0.7,
-                arrows=pattern.is_directed(),
-                arrowsize=18,
-                arrowstyle='-|>' if pattern.is_directed() else '-'
-            )
-
-        # Node labels
-        font_size = max(7, min(12, 200 // (num_nodes + 1)))
-        for node, (x, y) in pos.items():
-            label = node_labels[node]
-            is_anchor = pattern.nodes[node].get('anchor', 0) == 1
-            bbox_props = dict(
-                facecolor='lightcoral' if is_anchor else (1, 0.8, 0.8, 0.6),
-                edgecolor='darkred' if is_anchor else 'gray',
-                alpha=0.8,
-                boxstyle='round,pad=0.2'
-            )
-            plt.text(x, y, label, fontsize=font_size, fontweight='bold' if is_anchor else 'normal',
-                     color='black', ha='center', va='center', bbox=bbox_props)
-
-        # Edge labels (if not too dense)
-        if edge_density < 0.5 and num_edges < 25:
-            edge_labels = {}
-            for u, v, data in pattern.edges(data=True):
-                edge_type = (data.get('type') or data.get('label') or data.get('input_label') or
-                             data.get('relation') or data.get('edge_type'))
-                if edge_type:
-                    edge_labels[(u, v)] = str(edge_type)
-            if edge_labels:
-                nx.draw_networkx_edge_labels(pattern, pos, edge_labels=edge_labels,
-                                            font_size=max(6, font_size - 2), font_color='black',
-                                            bbox=dict(facecolor='white', edgecolor='lightgray',
-                                                      alpha=0.8, boxstyle='round,pad=0.1'))
-
-        # Edge color legend (always shown if >1 edge type)
-        if len(unique_edge_types) > 1:
-            edge_legend_elements = [
-                plt.Line2D([0], [0], color=color, linewidth=3, label=f'{edge_type}')
-                for edge_type, color in edge_color_map.items()
-            ]
-            legend = plt.legend(
-                handles=edge_legend_elements,
-                loc='upper left',
-                bbox_to_anchor=(1.02, 1),
-                borderaxespad=0.,
-                framealpha=0.9,
-                title="Edge Types",
-                fontsize=9
-            )
-            legend.get_title().set_fontsize(10)
-
-        plt.title(f"{'Directed' if pattern.is_directed() else 'Undirected'} Pattern Graph\n"
-                  f"(Size: {num_nodes} nodes, {num_edges} edges, Density: {edge_density:.2f})",
-                  fontsize=14, fontweight='bold')
-        plt.axis('off')
-        plt.tight_layout(rect=[0, 0, 0.85, 1])
-
-        # Save
-        graph_type_short = "dir" if pattern.is_directed() else "undir"
-        filename = f"{graph_type_short}_{num_nodes}_nodes_{num_edges}_edges"
-        plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
-        plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
-        plt.close()
-        return True
-    except Exception as e:
-        print(f"Error visualizing pattern graph: {e}")
-        return False
-
 def visualize_pattern_graph_new(pattern, args, count_by_size):
     try:
         num_nodes = len(pattern)
@@ -895,10 +760,10 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 framealpha=0.95,
                 title="Edge Types",
                 fontsize=legend_fontsize,
-                title_fontsize=legend_fontsize + 1,
                 fancybox=True,
                 shadow=True
             )
+            legend.get_title().set_fontsize(legend_fontsize + 1)
             
             # Adjust layout to accommodate legend
             if edge_density > 0.5:
