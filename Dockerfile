@@ -62,4 +62,6 @@ RUN pip install --no-cache-dir \
     test-tube==0.7.5 \
     tqdm==4.43.0
 
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
