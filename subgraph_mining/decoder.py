@@ -804,6 +804,9 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     fontsize=9,
                     title_fontsize=10
                 )
+                      
+                legend.get_title().set_fontsize(font_size + 1)
+
                 plt.tight_layout()
         else:
             plt.tight_layout()
