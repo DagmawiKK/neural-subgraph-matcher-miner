@@ -62,4 +62,7 @@ RUN pip install --no-cache-dir \
     test-tube==0.7.5 \
     tqdm==4.43.0
 
+RUN apt-get update && apt-get install -y graphviz graphviz-dev pkg-config
+RUN pip install pygraphviz
+
 COPY . .
