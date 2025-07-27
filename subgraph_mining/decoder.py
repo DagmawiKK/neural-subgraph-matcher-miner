@@ -1004,7 +1004,7 @@ def pattern_growth(dataset, task, args):
     
     successful_visualizations = 0
     for pattern in out_graphs:
-        if visualize_pattern_graph_new(pattern, args, count_by_size):
+        if visualize_pattern_graph(pattern, args, count_by_size):
             successful_visualizations += 1
         count_by_size[len(pattern)] += 1
 
