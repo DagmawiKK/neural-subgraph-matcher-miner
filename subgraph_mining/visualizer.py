@@ -6,8 +6,8 @@ import math
 
 def get_anchor_centered_layout(G):
     """
-    Create a directional layered layout with anchor nodes at the center
-    and other nodes arranged in directions following their predecessors
+    Create a radial layout with anchor at center, first layer in circle,
+    and subsequent layers extending outward like branches from a vase
     """
     # Find anchor nodes
     anchor_nodes = [n for n in G.nodes() if G.nodes[n].get('anchor', 0) == 1]
@@ -18,17 +18,15 @@ def get_anchor_centered_layout(G):
     
     pos = {}
     
-    # Step 1: Position anchor nodes at center (possibly shifted down if needed)
+    # Step 1: Position anchor nodes at center
     if len(anchor_nodes) == 1:
-        # Will position anchor after calculating layer structure
-        anchor_pos = np.array([0.0, 0.0])  # Temporary position
+        pos[anchor_nodes[0]] = np.array([0.0, 0.0])
     else:
         # Multiple anchors in small circle at center
         anchor_radius = 0.5
-        anchor_positions = {}
         for i, anchor in enumerate(anchor_nodes):
             angle = 2 * math.pi * i / len(anchor_nodes)
-            anchor_positions[anchor] = np.array([
+            pos[anchor] = np.array([
                 anchor_radius * math.cos(angle),
                 anchor_radius * math.sin(angle)
             ])
@@ -68,23 +66,20 @@ def get_anchor_centered_layout(G):
     for node, dist in distances.items():
         layers[dist].append(node)
     
-    # Step 4: Position nodes layer by layer following directional flow
-    base_radius = 2.5
-    radius_increment = 3.0
-    
-    # Position layer 1 (directly connected to anchors) in a circle
+    # Step 4: Position Layer 1 in a perfect circle around anchor(s)
+    base_radius = 3.0
     if 1 in layers:
         layer_1_nodes = layers[1]
         num_layer1 = len(layer_1_nodes)
         
-        # Sort by parent anchor and connection strength
+        # Sort layer 1 nodes for consistent arrangement
         def layer1_priority(node):
-            parent = parents[node]
             degree = G.degree(node) if not G.is_directed() else G.in_degree(node) + G.out_degree(node)
             return (-degree, str(node))  # Sort by degree, then name for consistency
         
         layer_1_nodes.sort(key=layer1_priority)
         
+        # Position in perfect circle
         for i, node in enumerate(layer_1_nodes):
             angle = 2 * math.pi * i / num_layer1
             pos[node] = np.array([
@@ -92,137 +87,116 @@ def get_anchor_centered_layout(G):
                 base_radius * math.sin(angle)
             ])
     
-    # Step 5: Position subsequent layers directionally
+    # Step 5: Position subsequent layers radially outward from their parents
+    radius_increment = 3.5
+    
     for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
         if layer_dist not in layers:
             continue
         
         nodes_in_layer = layers[layer_dist]
-        layer_radius = base_radius + (layer_dist - 1) * radius_increment
         
         for node in nodes_in_layer:
             parent = parents[node]
             if parent in pos:
-                # Calculate direction from anchor to parent
                 parent_pos = pos[parent]
                 
-                if len(anchor_nodes) == 1:
-                    # Direction from anchor to parent
-                    if np.linalg.norm(parent_pos) > 0:
-                        direction = parent_pos / np.linalg.norm(parent_pos)
-                    else:
-                        # Fallback direction if parent is at origin
-                        direction = np.array([1.0, 0.0])
+                # Calculate the radial direction from center through parent
+                if np.linalg.norm(parent_pos) > 0:
+                    # Direction from center through parent
+                    radial_direction = parent_pos / np.linalg.norm(parent_pos)
                 else:
-                    # For multiple anchors, use parent position as reference
-                    if np.linalg.norm(parent_pos) > 0:
-                        direction = parent_pos / np.linalg.norm(parent_pos)
-                    else:
-                        direction = np.array([1.0, 0.0])
+                    # Fallback direction if parent is at center
+                    radial_direction = np.array([1.0, 0.0])
                 
-                # Position node in the same direction but further out
-                base_position = direction * layer_radius
+                # Calculate distance for this layer
+                layer_distance = base_radius + (layer_dist - 1) * radius_increment
                 
-                # Add small perpendicular offset for multiple children of same parent
+                # Base position along the radial line
+                base_position = radial_direction * layer_distance
+                
+                # Handle multiple children of the same parent
                 siblings = [n for n in nodes_in_layer if parents[n] == parent]
                 if len(siblings) > 1:
                     sibling_index = siblings.index(node)
                     total_siblings = len(siblings)
                     
-                    # Create perpendicular vector
-                    perp_direction = np.array([-direction[1], direction[0]])
+                    # Create perpendicular vector for spreading siblings
+                    perp_direction = np.array([-radial_direction[1], radial_direction[0]])
                     
-                    # Spread siblings around the base position
+                    # Spread siblings around the radial line
                     if total_siblings > 1:
-                        offset_range = min(1.5, total_siblings * 0.4)
-                        offset = (sibling_index - (total_siblings - 1) / 2) * (offset_range / max(1, total_siblings - 1))
+                        # Adjust spread based on layer distance (farther layers can spread more)
+                        spread_factor = min(2.0, layer_distance * 0.3)
+                        offset = (sibling_index - (total_siblings - 1) / 2) * (spread_factor / max(1, total_siblings - 1))
                         base_position += perp_direction * offset
                 
                 pos[node] = base_position
     
-    # Step 6: Position anchors (possibly shifted to accommodate upper branches)
-    if len(anchor_nodes) == 1:
-        anchor = anchor_nodes[0]
-        # Check if we need to shift anchor down
-        max_y = max([p[1] for p in pos.values()] + [0])
-        min_y = min([p[1] for p in pos.values()] + [0])
-        
-        # If there are nodes with high y values, shift anchor down
-        if max_y > 2.0:
-            anchor_y = min_y - 1.0  # Position anchor below the lowest point
-        else:
-            anchor_y = 0.0
-        
-        pos[anchor] = np.array([0.0, anchor_y])
-    else:
-        # Multiple anchors - use pre-calculated positions
-        for anchor in anchor_nodes:
-            pos[anchor] = anchor_positions[anchor]
-    
-    # Step 7: Fine-tune positions to reduce overlaps
-    pos = optimize_directional_layout(G, pos, anchor_nodes, layers, parents)
+    # Step 6: Optimize positions to reduce overlaps while maintaining radial structure
+    pos = optimize_radial_layout(G, pos, anchor_nodes, layers, parents)
     
     return pos
 
-def optimize_directional_layout(G, pos, anchor_nodes, layers, parents, max_iterations=50):
+def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations=50):
     """
-    Fine-tune the directional layout to reduce overlaps while maintaining directional flow
+    Fine-tune the radial layout to reduce overlaps while maintaining the vase-like structure
     """
     # Convert to numpy arrays for easier manipulation
     nodes = list(pos.keys())
     positions = np.array([pos[node] for node in nodes])
     
-    # Keep anchors fixed
+    # Keep anchors fixed at center
     anchor_indices = [i for i, node in enumerate(nodes) if node in anchor_nodes]
     
     for iteration in range(max_iterations):
         moved = False
         
-        # For each non-anchor node, try small adjustments
+        # For each non-anchor node, try small adjustments that preserve radial structure
         for i, node in enumerate(nodes):
             if i in anchor_indices:
                 continue  # Don't move anchor nodes
             
             current_pos = positions[i].copy()
             best_pos = current_pos.copy()
-            best_score = calculate_directional_score(G, positions, nodes, i, parents)
+            best_score = calculate_radial_score(G, positions, nodes, i, parents, anchor_nodes)
             
-            # Try small perturbations, but prefer to stay in the same general direction
             parent = parents.get(node)
             if parent and parent in nodes:
                 parent_idx = nodes.index(parent)
                 parent_pos = positions[parent_idx]
                 
-                # Preferred direction: away from parent
-                if np.linalg.norm(current_pos - parent_pos) > 0:
-                    preferred_dir = (current_pos - parent_pos) / np.linalg.norm(current_pos - parent_pos)
+                # For radial layout, allow movement mainly perpendicular to radial direction
+                if np.linalg.norm(current_pos) > 0:
+                    radial_dir = current_pos / np.linalg.norm(current_pos)
+                    perp_dir = np.array([-radial_dir[1], radial_dir[0]])
+                    
+                    # Try small adjustments: radial (in/out) and perpendicular (around circle)
+                    test_directions = [
+                        perp_dir * 0.3,      # Around the circle
+                        -perp_dir * 0.3,     # Other direction around circle
+                        radial_dir * 0.2,    # Slightly further out
+                        -radial_dir * 0.1,   # Slightly closer in
+                        (perp_dir + radial_dir) * 0.2,  # Diagonal adjustments
+                        (perp_dir - radial_dir) * 0.2,
+                    ]
                 else:
-                    preferred_dir = np.array([1.0, 0.0])
-                
-                # Try perturbations mainly in preferred direction and perpendicular
-                perp_dir = np.array([-preferred_dir[1], preferred_dir[0]])
-                
-                test_directions = [
-                    preferred_dir * 0.3,  # Further from parent
-                    -preferred_dir * 0.1,  # Slightly closer to parent
-                    perp_dir * 0.2,  # Perpendicular directions
-                    -perp_dir * 0.2,
-                    (preferred_dir + perp_dir) * 0.2,  # Diagonal combinations
-                    (preferred_dir - perp_dir) * 0.2,
-                ]
+                    # Fallback for nodes at origin
+                    test_directions = []
+                    for angle in [0, math.pi/3, 2*math.pi/3, math.pi, 4*math.pi/3, 5*math.pi/3]:
+                        test_directions.append(0.2 * np.array([math.cos(angle), math.sin(angle)]))
             else:
-                # No parent info, try general perturbations
-                perturbation_size = 0.2
+                # No parent info, try small general perturbations
                 test_directions = []
                 for angle in [0, math.pi/4, math.pi/2, 3*math.pi/4, math.pi, 5*math.pi/4, 3*math.pi/2, 7*math.pi/4]:
-                    test_directions.append(perturbation_size * np.array([math.cos(angle), math.sin(angle)]))
+                    test_directions.append(0.2 * np.array([math.cos(angle), math.sin(angle)]))
             
             for direction in test_directions:
                 test_pos = current_pos + direction
                 
                 # Temporarily update position
                 positions[i] = test_pos
-                score = calculate_directional_score(G, positions, nodes, i, parents)
+                score = calculate_radial_score(G, positions, nodes, i, parents, anchor_nodes)
                 
                 if score < best_score:
                     best_score = score
@@ -242,10 +216,10 @@ def optimize_directional_layout(G, pos, anchor_nodes, layers, parents, max_itera
     
     return optimized_pos
 
-def calculate_directional_score(G, positions, nodes, node_idx, parents):
+def calculate_radial_score(G, positions, nodes, node_idx, parents, anchor_nodes):
     """
-    Calculate a score for the directional layout (lower is better)
-    Considers node overlaps, edge lengths, and directional consistency
+    Calculate a score for the radial layout (lower is better)
+    Emphasizes maintaining radial structure while avoiding overlaps
     """
     score = 0.0
     node = nodes[node_idx]
@@ -256,21 +230,38 @@ def calculate_directional_score(G, positions, nodes, node_idx, parents):
         if i == node_idx:
             continue
         distance = np.linalg.norm(node_pos - positions[i])
-        if distance < 1.2:  # Minimum desired distance
-            score += (1.2 - distance) ** 2 * 15
+        if distance < 1.0:  # Minimum desired distance
+            score += (1.0 - distance) ** 2 * 20
     
-    # Penalty for deviating from directional flow
+    # Penalty for deviating too much from radial structure
     parent = parents.get(node)
     if parent and parent in nodes:
         parent_idx = nodes.index(parent)
         parent_pos = positions[parent_idx]
         
-        # Check if we're moving in the right direction from parent
-        current_dist = np.linalg.norm(node_pos - parent_pos)
-        if current_dist < 1.5:  # Too close to parent
-            score += (1.5 - current_dist) ** 2 * 10
+        # Check if node is roughly in line with parent (from center)
+        if np.linalg.norm(parent_pos) > 0.1:  # Parent not at center
+            parent_direction = parent_pos / np.linalg.norm(parent_pos)
+            if np.linalg.norm(node_pos) > 0.1:  # Node not at center
+                node_direction = node_pos / np.linalg.norm(node_pos)
+                
+                # Calculate angle deviation from parent's radial direction
+                dot_product = np.dot(parent_direction, node_direction)
+                dot_product = np.clip(dot_product, -1.0, 1.0)  # Ensure valid range
+                angle_deviation = math.acos(dot_product)
+                
+                # Penalty for large angular deviation (allows some spread for siblings)
+                max_allowed_angle = math.pi / 6  # 30 degrees
+                if angle_deviation > max_allowed_angle:
+                    score += (angle_deviation - max_allowed_angle) ** 2 * 5
+        
+        # Ensure child is farther from center than parent
+        parent_dist = np.linalg.norm(parent_pos)
+        node_dist = np.linalg.norm(node_pos)
+        if node_dist < parent_dist + 0.5:  # Should be at least 0.5 units farther
+            score += (parent_dist + 0.5 - node_dist) ** 2 * 10
     
-    # Penalty for very long edges to connected nodes
+    # Penalty for very long edges
     neighbors = set()
     if G.is_directed():
         neighbors.update(G.successors(node))
@@ -282,7 +273,6 @@ def calculate_directional_score(G, positions, nodes, node_idx, parents):
         if neighbor in nodes:
             neighbor_idx = nodes.index(neighbor)
             edge_length = np.linalg.norm(node_pos - positions[neighbor_idx])
-            # Penalty for edges that are too long
             if edge_length > 8.0:
                 score += (edge_length - 8.0) ** 2 * 2
     
