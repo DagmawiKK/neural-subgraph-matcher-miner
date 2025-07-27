@@ -446,6 +446,7 @@ def visualize_pattern_graph(pattern, args, count_by_size):
         return False
 
 def visualize_pattern_graph_new(pattern, args, count_by_size):
+    print(f"Processing pattern with {len(pattern)} nodes")
     try:
         print(f"Starting visualization for pattern with {len(pattern)} nodes") # Add this
         num_nodes = len(pattern)
@@ -845,10 +846,10 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
         plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
         plt.close()
-        
+        print(f"Successfully saved plot for pattern with {len(pattern)} nodes")
         return True
     except Exception as e:
-        print(f"Error visualizing pattern graph: {e}")
+        print(f"Error visualizing pattern with {len(pattern)} nodes: {e}")
         import traceback
         traceback.print_exc()
         return False
