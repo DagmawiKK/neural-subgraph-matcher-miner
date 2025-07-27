@@ -858,241 +858,155 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         traceback.print_exc()
         return False
 
-
 def visualize_pattern_graph_newer(pattern, args, count_by_size):
     """
-    Generates a clear and robust visualization of a graph pattern.
-    
-    Improvements:
-    - Draws labels directly inside larger nodes instead of using separate text boxes.
-    - Uses a custom circular layout for "star graph" patterns for optimal clarity.
-    - Disables edge label rotation to prevent cluttered text.
-    - Fixes a latent bug with invalid arguments in the edge drawing call.
+    Visualizes a graph pattern with a custom hierarchical layout and detailed logging.
     """
     try:
         num_nodes = len(pattern)
         num_edges = pattern.number_of_edges()
+        print(f"\n--- LOG: Starting visualization for pattern with {num_nodes} nodes and {num_edges} edges. ---")
+
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
-        
+
         # Adaptive figure sizing
-        base_size = max(14, min(28, num_nodes * 1.8))
-        if num_nodes > 25 or edge_density > 0.4:
-            figsize = (base_size * 1.4, base_size * 1.1)
-        else:
-            figsize = (base_size, base_size * 0.9)
+        base_size = max(16, min(32, num_nodes * 1.5))
+        figsize = (base_size, base_size)
+        print(f"--- LOG: Calculated figsize: {figsize}")
         
         fig, ax = plt.subplots(figsize=figsize)
 
-        # Build node labels with smart truncation
-        node_labels = {}
-        for n in pattern.nodes():
-            node_data = pattern.nodes[n]
-            node_id = node_data.get('id', str(n))
-            node_label = node_data.get('label', 'unknown')
+        # --- Hierarchical Layout Logic with Logging ---
+        print("--- LOG: --- Layout Selection ---")
+        pos = None
+        anchor_nodes = [n for n, d in pattern.nodes(data=True) if d.get('anchor') == 1]
+
+        if len(anchor_nodes) == 1:
+            print(f"--- LOG: Found 1 anchor node. Checking for hierarchical gene -> transcript -> protein structure.")
+            anchor_node = anchor_nodes[0]
             
-            label_parts = [f"{node_label}:{node_id}"]
-            
-            other_attrs = {k: v for k, v in node_data.items() 
-                          if k not in ['id', 'label', 'anchor'] and v is not None}
-            
-            if other_attrs:
-                for key, value in other_attrs.items():
-                    if isinstance(value, str):
-                        if num_nodes > 25 or edge_density > 0.5:
-                            value = value[:4] + "..." if len(value) > 4 else value
-                        elif num_nodes > 20 or edge_density > 0.3:
-                            value = value[:7] + "..." if len(value) > 7 else value
-                        else:
-                            value = value[:12] + "..." if len(value) > 12 else value
-                    elif isinstance(value, float):
-                        value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
-                    
-                    if num_nodes > 20:
-                        label_parts.append(f"{key}:{value}")
-                    else:
-                        label_parts.append(f"{key}: {value}")
-            
-            if num_nodes > 20:
-                node_labels[n] = "; ".join(label_parts)
-            else:
-                node_labels[n] = "\n".join(label_parts)
+            transcript_nodes = []
+            protein_nodes = defaultdict(list)
+            is_hierarchical = False
 
-        # Smart layout selection with special handling for star graphs
-        anchor_nodes_list = [n for n, d in pattern.nodes(data=True) if d.get('anchor') == 1]
-        is_star_graph = (len(anchor_nodes_list) == 1 and 
-                         pattern.degree(anchor_nodes_list[0]) >= num_nodes - 1)
-
-        if is_star_graph:
-            print("Using custom circular layout for star graph topology")
-            center_node = anchor_nodes_list[0]
-            peripheral_nodes = [n for n in pattern.nodes() if n != center_node]
-            # Create a circular layout for the outer nodes and scale it
-            pos = nx.circular_layout(pattern.subgraph(peripheral_nodes), scale=4)
-            # Place the anchor at the true center
-            pos[center_node] = np.array([0, 0])
-        elif num_nodes > 30:
-            if pattern.is_directed():
-                try:
-                    pos = nx.nx_agraph.graphviz_layout(pattern, prog='dot')
-                    print("Using graphviz_layout")
-                except ImportError:
-                    pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
-                    print("Using spring_layout (graphviz not found)")
-            else:
-                pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
-                print("Using spring_layout for large undirected")
-        elif edge_density > 0.4 or num_nodes > 20:
-            pos = nx.circular_layout(pattern, scale=4)
-            print("Using circular_layout for dense/medium graph")
-        else:
-            pos = nx.spring_layout(pattern, k=2.5, seed=42, iterations=100)
-            print("Using spring_layout for small/sparse graph")
-
-        # Color mapping
-        unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
-        label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
-        unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
-        edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
-
-        # INCREASED: Node sizes are much larger to contain labels directly.
-        if num_nodes > 30:
-            base_node_size = 4000
-            anchor_node_size = base_node_size * 1.3
-        elif num_nodes > 20 or edge_density > 0.5:
-            base_node_size = 6000
-            anchor_node_size = base_node_size * 1.3
-        elif edge_density > 0.3:
-            base_node_size = 8000
-            anchor_node_size = base_node_size * 1.2
-        else:
-            base_node_size = 10000
-            anchor_node_size = base_node_size * 1.2
-
-        # Prepare node attributes
-        node_list = list(pattern.nodes())
-        node_colors = []
-        node_sizes = []
-        node_shapes = {} # Use a dictionary for nx.draw_networkx_nodes
-        
-        for node in node_list:
-            node_data = pattern.nodes[node]
-            node_label = node_data.get('label', 'unknown')
-            is_anchor = node_data.get('anchor', 0) == 1 
-            
-            if is_anchor:
-                node_colors.append('lightcoral')
-                node_sizes.append(anchor_node_size)
-                node_shapes[node] = 's'
-            else:
-                node_colors.append(label_color_map[node_label])
-                node_sizes.append(base_node_size)
-                node_shapes[node] = 'o'
-
-        # Draw nodes (one call for each shape)
-        for shape in set(node_shapes.values()):
-            nodelist = [node for node, s in node_shapes.items() if s == shape]
-            sizes = [node_sizes[i] for i, node in enumerate(node_list) if node in nodelist]
-            colors = [node_colors[i] for i, node in enumerate(node_list) if node in nodelist]
-            nx.draw_networkx_nodes(pattern, pos, 
-                    nodelist=nodelist,
-                    node_color=colors, 
-                    node_size=sizes, 
-                    node_shape=shape,
-                    edgecolors='black', 
-                    linewidths=2,
-                    alpha=0.9)
-
-        # Adaptive edge styling
-        edge_width = 2.5 if edge_density < 0.3 else (2.0 if edge_density < 0.5 else 1.5)
-        edge_alpha = 0.8 if edge_density < 0.3 else (0.7 if edge_density < 0.5 else 0.6)
-        
-        # Draw edges
-        if pattern.is_directed():
-            arrow_size = 25 if num_nodes <= 20 else (20 if num_nodes <= 30 else 15)
-            connectionstyle = f"arc3,rad={0.15 if edge_density > 0.1 else 0.1}"
-            
             for u, v, data in pattern.edges(data=True):
-                edge_color = edge_color_map.get(data.get('type', 'default'), 'black')
-                # FIXED: Removed invalid arguments (node_size, min_source_margin) from this call
-                nx.draw_networkx_edges(
-                    pattern, pos,
-                    edgelist=[(u, v)],
-                    width=edge_width,
-                    edge_color=[edge_color],
-                    alpha=edge_alpha,
-                    arrows=True,
-                    arrowsize=arrow_size,
-                    arrowstyle='-|>',
-                    connectionstyle=connectionstyle
-                )
-        else: # Undirected
-            nx.draw_networkx_edges(pattern, pos, width=edge_width, alpha=edge_alpha)
+                edge_type = data.get('type')
+                if edge_type == 'transcribed_to' and u == anchor_node:
+                    transcript_nodes.append(v)
+                elif edge_type == 'translates_to':
+                    protein_nodes[u].append(v)
+                    is_hierarchical = True
+            
+            if is_hierarchical:
+                print(f"--- LOG: Hierarchical structure DETECTED. Found {len(transcript_nodes)} transcripts and {sum(len(p) for p in protein_nodes.values())} proteins.")
+                pos = {}
+                # 1. Place anchor at the center
+                pos[anchor_node] = np.array([0, 0])
+                
+                # 2. Place main non-protein nodes in a circle
+                main_nodes = [n for n in pattern.nodes() if n != anchor_node and n not in protein_nodes]
+                if main_nodes:
+                    radius = 0.6
+                    main_pos = nx.circular_layout(pattern.subgraph(main_nodes), scale=radius)
+                    pos.update(main_pos)
+                    print(f"--- LOG: Placed {len(main_nodes)} main nodes in a circular layout.")
 
-        # Adaptive font sizing for labels inside nodes
-        font_size = max(8, min(12, 250 // (num_nodes + 2)))
+                # 3. Place proteins as satellites
+                for transcript, proteins in protein_nodes.items():
+                    if transcript not in pos:
+                        print(f"--- LOG: WARNING - Transcript {transcript} has proteins but no position in the main layout. Skipping its satellites.")
+                        continue
+                    
+                    trans_pos = pos[transcript]
+                    vec_norm = np.linalg.norm(trans_pos)
+                    vec = trans_pos / vec_norm if vec_norm > 0 else np.array([1, 0])
 
-        # CHANGED: Replaced custom plt.text drawing with standard networkx labels for clarity.
-        nx.draw_networkx_labels(pattern, pos, labels=node_labels, font_size=font_size, font_color='black')
+                    satellite_distance = radius * 0.4 
+                    for i, protein in enumerate(proteins):
+                        angle_deg = 15 * (i - (len(proteins) - 1) / 2)
+                        angle_rad = np.deg2rad(angle_deg)
+                        rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)], [np.sin(angle_rad), np.cos(angle_rad)]])
+                        protein_vec = np.dot(rotation_matrix, vec)
+                        pos[protein] = trans_pos + protein_vec * satellite_distance
+                print(f"--- LOG: Placed {sum(len(p) for p in protein_nodes.values())} protein satellites.")
 
-        # Draw edge labels for smaller, less dense graphs
-        if num_nodes <= 25 and edge_density < 0.4 and num_edges < 30:
-            edge_labels = { (u, v): str(d.get('type', '')) for u, v, d in pattern.edges(data=True) if d.get('type') }
-            if edge_labels:
-                edge_font_size = max(7, font_size - 2)
-                # TWEAKED: Disabled label rotation and adjusted position.
-                nx.draw_networkx_edge_labels(pattern, pos, 
-                          edge_labels=edge_labels, 
-                          font_size=edge_font_size, 
-                          font_color='darkblue',
-                          rotate=False,
-                          label_pos=0.3,
-                          bbox=dict(facecolor='white', edgecolor='lightgray', 
-                                  alpha=0.8, boxstyle='round,pad=0.1'))
+            else:
+                print("--- LOG: Hierarchical structure NOT found (no 'translates_to' edges). Falling back to standard layout.")
+        else:
+            print(f"--- LOG: Found {len(anchor_nodes)} anchor nodes. Not a star graph. Falling back to standard layout.")
 
-        # Create comprehensive title
-        graph_type = "Directed" if pattern.is_directed() else "Undirected"
-        has_anchors = any(d.get('anchor', 0) == 1 for n, d in pattern.nodes(data=True))
-        anchor_info = " (Red squares = anchor nodes)" if has_anchors else ""
-        total_node_attrs = sum(len(d) - 3 for n, d in pattern.nodes(data=True)) # Approx.
-        attr_info = f", {total_node_attrs} total attrs" if total_node_attrs > 0 else ""
-        density_info = f"Density: {edge_density:.2f}"
-        title = f"{graph_type} Pattern Graph{anchor_info}\n({num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
-        plt.title(title, fontsize=max(12, 20 - num_nodes // 10), fontweight='bold', pad=20)
-        plt.axis('off')
-
-        # Create legends
-        legend_elements = []
-        if len(unique_labels) > 1:
-            for label, color in label_color_map.items():
-                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10, label=f'Node: {label}', markeredgecolor='black'))
-        if has_anchors:
-            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='lightcoral', markersize=12, label='Anchor Node', markeredgecolor='black'))
-        if len(unique_edge_types) > 1 and any(et != 'default' for et in unique_edge_types):
-             for edge_type, color in edge_color_map.items():
-                if edge_type != 'default':
-                    legend_elements.append(plt.Line2D([0], [0], color=color, linewidth=3, label=f'Edge: {edge_type}'))
+        # Fallback to Spring Layout if custom layout was not applied
+        if pos is None:
+            print("--- LOG: Applying spring_layout as the fallback.")
+            pos = nx.spring_layout(pattern, k=3.0, seed=42, iterations=150)
         
-        if legend_elements:
-            legend = plt.legend(handles=legend_elements, loc='best', framealpha=0.95, title="Graph Elements")
-            legend.get_title().set_fontsize(font_size) # Use calculated font_size
+        print("--- LOG: --- End Layout Selection ---")
 
+        # Build node labels
+        node_labels = {n: "\n".join([f"{k}: {v}" for k, v in d.items() if k not in ['anchor', 'shape']]) for n, d in pattern.nodes(data=True)}
+        
+        # Color mapping
+        unique_labels = sorted(set(d.get('label', 'unknown') for n, d in pattern.nodes(data=True)))
+        label_color_map = {label: color for label, color in zip(unique_labels, plt.cm.Pastel1.colors)}
+        edge_color_map = {'transcribed_to': '#2c7fb8', 'translates_to': '#7fcdbb'}
+
+        # Node styling
+        base_node_size, anchor_node_size = 8000, 9000
+        node_sizes = [anchor_node_size if pattern.nodes[n].get('anchor') else base_node_size for n in pattern.nodes()]
+        node_colors = ['lightcoral' if pattern.nodes[n].get('anchor') else label_color_map.get(pattern.nodes[n].get('label', 'unknown'), 'grey') for n in pattern.nodes()]
+        print(f"--- LOG: Set node sizes. Base: {base_node_size}, Anchor: {anchor_node_size}")
+
+        # --- Drawing Steps ---
+        print("--- LOG: Drawing nodes...")
+        nx.draw_networkx_nodes(pattern, pos, node_size=node_sizes, node_color=node_colors, edgecolors='black', linewidths=1.5)
+
+        print("--- LOG: Drawing edges...")
+        for u, v, data in pattern.edges(data=True):
+            edge_type = data.get('type')
+            color = edge_color_map.get(edge_type, '#a6a6a6')
+            width = 1.8 if edge_type == 'translates_to' else 2.5
+            rad = 0.15 if edge_type == 'translates_to' else 0.1
+            nx.draw_networkx_edges(pattern, pos, edgelist=[(u, v)], width=width, edge_color=color, alpha=0.8, 
+                                   arrows=True, arrowsize=20, connectionstyle=f'arc3,rad={rad}')
+
+        print("--- LOG: Drawing node labels with bounding boxes...")
+        font_size = 7
+        for node, (x, y) in pos.items():
+            is_anchor = pattern.nodes[node].get('anchor', 0) == 1
+            bbox_props = dict(boxstyle='round,pad=0.4', facecolor='lightcoral' if is_anchor else 'lightblue',
+                              edgecolor='black', alpha=0.9, lw=1.5)
+            plt.text(x, y, node_labels[node], fontsize=font_size, ha='center', va='center', bbox=bbox_props)
+        
+        print("--- LOG: Drawing edge labels...")
+        edge_labels = {(u, v): d.get('type', '') for u, v, d in pattern.edges(data=True)}
+        nx.draw_networkx_edge_labels(pattern, pos, edge_labels=edge_labels, font_size=8, font_color='black',
+                                     rotate=False, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=1))
+        
+        # Title and final setup
+        plt.title(f"Directed Pattern Graph ({num_nodes} nodes, {num_edges} edges)", fontsize=20, fontweight='bold', pad=20)
+        plt.axis('off')
         plt.tight_layout()
 
-        # Generate filename
-        pattern_info = [f"{num_nodes}-{count_by_size[num_nodes]}"]
-        filename = "_".join(pattern_info) # Simplified filename
+        # Generate filename and save
+        filename = f"plots/cluster/{num_nodes}-nodes_{count_by_size[num_nodes]}"
+        print(f"--- LOG: Saving plot to {filename}.png/.pdf")
         
-        plt.savefig(f"plots/cluster/{filename}.png", bbox_inches='tight', dpi=300)
-        plt.savefig(f"plots/cluster/{filename}.pdf", bbox_inches='tight')
+        plt.savefig(f"{filename}.png", bbox_inches='tight', dpi=300)
+        plt.savefig(f"{filename}.pdf", bbox_inches='tight')
         plt.close()
         
-        print(f"Successfully saved plot for pattern with {num_nodes} nodes")
+        print(f"--- SUCCESS: Successfully saved plot for pattern with {num_nodes} nodes. ---")
         return True
+
     except Exception as e:
-        print(f"Error visualizing pattern with {len(pattern)} nodes: {e}")
+        # Enhanced error logging
+        node_count_on_fail = len(pattern) if 'pattern' in locals() else 'unknown'
+        print(f"\n--- ERROR: CRITICAL FAILURE visualizing pattern with {node_count_on_fail} nodes. ---")
+        print(f"--- ERROR DETAILS: {e}")
         import traceback
         traceback.print_exc()
         return False
+
 
 def pattern_growth(dataset, task, args):
     start_time = time.time()
