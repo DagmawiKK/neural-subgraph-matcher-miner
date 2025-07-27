@@ -365,26 +365,17 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
         
         # Adaptive node sizing based on number of nodes
-        if num_nodes <= 5:
+        if num_nodes > 30:
+            base_node_size = 3000
+            anchor_node_size = base_node_size * 1.3
+        elif num_nodes > 20 or edge_density > 0.5:
             base_node_size = 3500
             anchor_node_size = base_node_size * 1.3
-        elif num_nodes <= 8:
-            base_node_size = 2500
-            anchor_node_size = base_node_size * 1.3
-        elif num_nodes <= 13:
-            base_node_size = 1800
-            anchor_node_size = base_node_size * 1.3
-        elif num_nodes <= 20:
-            base_node_size = 1200
-            anchor_node_size = base_node_size * 1.3
-        elif num_nodes > 30:
-            base_node_size = 900
-            anchor_node_size = base_node_size * 1.3
-        elif edge_density > 0.5:
-            base_node_size = 1000
+        elif edge_density > 0.3:
+            base_node_size = 5000
             anchor_node_size = base_node_size * 1.3
         else:
-            base_node_size = 1400
+            base_node_size = 7000
             anchor_node_size = base_node_size * 1.3
         
         # Prepare node attributes
@@ -512,21 +503,14 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         max_attrs_per_node = max(len([k for k in pattern.nodes[n].keys() 
                                     if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
-        
-        if num_nodes <= 5:
-            font_size = 14
-        elif num_nodes <= 8:
-            font_size = 12
-        elif num_nodes <= 13:
-            font_size = 10
-        elif num_nodes <= 20:
-            font_size = 9
-        elif num_nodes > 30:
-            font_size = 7
+        if num_nodes > 30:
+            font_size = max(6, min(8, 120 // (num_nodes + max_attrs_per_node * 3)))
+        elif num_nodes > 20:
+            font_size = max(7, min(9, 160 // (num_nodes + max_attrs_per_node * 4)))
         elif edge_density > 0.5:
-            font_size = 8
+            font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
         else:
-            font_size = 9
+            font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2)))
         
         # Draw node labels with adaptive padding based on node count
         for node, (x, y) in pos.items():
