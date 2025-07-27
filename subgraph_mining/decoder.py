@@ -453,11 +453,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         
         # Adaptive figure sizing
 
-        base_size = max(14, min(28, num_nodes * 1.8))
-        if num_nodes > 25 or edge_density > 0.4:
-            figsize = (base_size * 1.4, base_size * 1.1)
+        base_size = max(12, min(20, num_nodes * 2))
+        if edge_density > 0.3:  # Dense graph
+            figsize = (base_size * 1.2, base_size)
         else:
-            figsize = (base_size, base_size * 0.9)
+            figsize = (base_size, base_size * 0.8)
         
         fig, ax = plt.subplots(figsize=figsize)
 
