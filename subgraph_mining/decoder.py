@@ -485,10 +485,10 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                         # More aggressive truncation for large/dense graphs
                         if num_nodes > 25 or edge_density > 0.5:
                             value = value[:4] + "..." if len(value) > 4 else value
-                        elif num_nodes > 15 or edge_density > 0.3:
+                        elif num_nodes > 20 or edge_density > 0.3:
                             value = value[:7] + "..." if len(value) > 7 else value
-                        else:
-                            value = value[:12] + "..." if len(value) > 12 else value
+                        # else:
+                        #     value = value[:12] + "..." if len(value) > 12 else value
                     elif isinstance(value, (int, float)):
                         if isinstance(value, float):
                             value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
@@ -546,11 +546,11 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             base_node_size = 3500
             anchor_node_size = base_node_size * 1.3
         elif edge_density > 0.3:
-            base_node_size = 4000
-            anchor_node_size = base_node_size * 1.2
-        else:
             base_node_size = 5000
-            anchor_node_size = base_node_size * 1.2
+            anchor_node_size = base_node_size * 1.3
+        else:
+            base_node_size = 7000
+            anchor_node_size = base_node_size * 1.3
 
         # Prepare node attributes
         colors = []
@@ -682,7 +682,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         elif edge_density > 0.5:
             font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
         else:
-            font_size = max(9, min(12, 250 // (num_nodes + max_attrs_per_node * 2)))
+            font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2)))
         
         # Draw node labels
         for node, (x, y) in pos.items():
@@ -694,9 +694,9 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             if num_nodes > 25:
                 pad = 0.1
             elif num_nodes > 15:
-                pad = 0.15
-            else:
                 pad = 0.25
+            else:
+                pad = 0.3
             
             bbox_props = dict(
                 facecolor='lightcoral' if is_anchor else 'lightblue',
