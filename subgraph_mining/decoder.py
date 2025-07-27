@@ -489,7 +489,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                 node_labels[n] = "\n".join(label_parts)
         # Smart layout selection
 
-        if num_nodes > 14:
+        if num_nodes > 30:
             # For very large graphs, use hierarchical layout if directed
 
             if pattern.is_directed():
