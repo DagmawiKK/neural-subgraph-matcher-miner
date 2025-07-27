@@ -63,8 +63,8 @@ def parse_decoder(parser):
         
         # Decoder defaults
         out_path="results/out-patterns.p",
-        n_neighborhoods=500,
-        n_trials=100,
+        n_neighborhoods=2000,
+        n_trials=500,
         decode_thresh=0.5,
         radius=3,
         subgraph_sample_size=0,
