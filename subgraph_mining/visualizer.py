@@ -6,8 +6,8 @@ import math
 
 def get_anchor_centered_layout(G):
     """
-    Create a circular layered layout with anchor nodes at the center
-    and other nodes arranged in concentric circles based on their distance from anchors
+    Create a directional layered layout with anchor nodes at the center
+    and other nodes arranged in directions following their predecessors
     """
     # Find anchor nodes
     anchor_nodes = [n for n in G.nodes() if G.nodes[n].get('anchor', 0) == 1]
@@ -18,109 +18,155 @@ def get_anchor_centered_layout(G):
     
     pos = {}
     
-    # Step 1: Position anchor nodes at center
+    # Step 1: Position anchor nodes at center (possibly shifted down if needed)
     if len(anchor_nodes) == 1:
-        # Single anchor at origin
-        pos[anchor_nodes[0]] = np.array([0.0, 0.0])
+        # Will position anchor after calculating layer structure
+        anchor_pos = np.array([0.0, 0.0])  # Temporary position
     else:
         # Multiple anchors in small circle at center
         anchor_radius = 0.5
+        anchor_positions = {}
         for i, anchor in enumerate(anchor_nodes):
             angle = 2 * math.pi * i / len(anchor_nodes)
-            pos[anchor] = np.array([
+            anchor_positions[anchor] = np.array([
                 anchor_radius * math.cos(angle),
                 anchor_radius * math.sin(angle)
             ])
     
-    # Step 2: Calculate distances from anchor nodes using BFS
+    # Step 2: Build parent-child relationships and calculate distances
     distances = {}
+    parents = {}  # Track immediate parent for directional positioning
     visited = set()
     queue = deque()
     
     # Initialize with anchor nodes at distance 0
     for anchor in anchor_nodes:
         distances[anchor] = 0
-        queue.append((anchor, 0))
+        parents[anchor] = None
+        queue.append((anchor, 0, None))  # (node, distance, parent)
         visited.add(anchor)
     
-    # BFS to find shortest distance to any anchor
+    # BFS to find shortest distance and parent relationships
     while queue:
-        node, dist = queue.popleft()
+        node, dist, parent = queue.popleft()
         
-        # Check both incoming and outgoing edges for comprehensive connectivity
-        neighbors = set()
+        # Get successors (outgoing edges) for directed positioning
         if G.is_directed():
-            neighbors.update(G.successors(node))
-            neighbors.update(G.predecessors(node))
+            neighbors = list(G.successors(node))
         else:
-            neighbors.update(G.neighbors(node))
+            neighbors = list(G.neighbors(node))
         
         for neighbor in neighbors:
             if neighbor not in visited:
                 distances[neighbor] = dist + 1
-                queue.append((neighbor, dist + 1))
+                parents[neighbor] = node
+                queue.append((neighbor, dist + 1, node))
                 visited.add(neighbor)
     
     # Step 3: Group nodes by distance (layers)
     layers = defaultdict(list)
     for node, dist in distances.items():
-        if node not in anchor_nodes:  # Anchors already positioned
-            layers[dist].append(node)
+        layers[dist].append(node)
     
-    # Step 4: Position nodes in concentric circles
-    base_radius = 2.0
-    radius_increment = 2.5
+    # Step 4: Position nodes layer by layer following directional flow
+    base_radius = 2.5
+    radius_increment = 3.0
     
-    for layer_dist, nodes_in_layer in layers.items():
-        if not nodes_in_layer:
-            continue
-            
-        # Calculate radius for this layer
-        layer_radius = base_radius + (layer_dist - 1) * radius_increment
+    # Position layer 1 (directly connected to anchors) in a circle
+    if 1 in layers:
+        layer_1_nodes = layers[1]
+        num_layer1 = len(layer_1_nodes)
         
-        # Sort nodes in layer for better visual arrangement
-        # Priority: nodes with more connections to previous layers come first
-        def node_priority(node):
-            # Count connections to nodes in previous layers (closer to anchor)
-            prev_layer_connections = 0
-            neighbors = set()
-            if G.is_directed():
-                neighbors.update(G.successors(node))
-                neighbors.update(G.predecessors(node))
-            else:
-                neighbors.update(G.neighbors(node))
-            
-            for neighbor in neighbors:
-                if neighbor in distances and distances[neighbor] < layer_dist:
-                    prev_layer_connections += 1
-            
-            # Also consider total degree
-            total_degree = G.degree(node) if not G.is_directed() else G.in_degree(node) + G.out_degree(node)
-            
-            return (-prev_layer_connections, -total_degree)  # Negative for descending sort
+        # Sort by parent anchor and connection strength
+        def layer1_priority(node):
+            parent = parents[node]
+            degree = G.degree(node) if not G.is_directed() else G.in_degree(node) + G.out_degree(node)
+            return (-degree, str(node))  # Sort by degree, then name for consistency
         
-        nodes_in_layer.sort(key=node_priority)
+        layer_1_nodes.sort(key=layer1_priority)
         
-        # Position nodes in circle
-        num_nodes = len(nodes_in_layer)
-        for i, node in enumerate(nodes_in_layer):
-            # Add some offset to avoid perfect alignment with previous layers
-            angle_offset = (layer_dist * 0.3) % (2 * math.pi / max(num_nodes, 1))
-            angle = (2 * math.pi * i / num_nodes) + angle_offset
-            
+        for i, node in enumerate(layer_1_nodes):
+            angle = 2 * math.pi * i / num_layer1
             pos[node] = np.array([
-                layer_radius * math.cos(angle),
-                layer_radius * math.sin(angle)
+                base_radius * math.cos(angle),
+                base_radius * math.sin(angle)
             ])
     
-    # Step 5: Fine-tune positions to reduce edge crossings and overlaps
-    pos = optimize_circular_layout(G, pos, anchor_nodes, layers)
+    # Step 5: Position subsequent layers directionally
+    for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
+        if layer_dist not in layers:
+            continue
+        
+        nodes_in_layer = layers[layer_dist]
+        layer_radius = base_radius + (layer_dist - 1) * radius_increment
+        
+        for node in nodes_in_layer:
+            parent = parents[node]
+            if parent in pos:
+                # Calculate direction from anchor to parent
+                parent_pos = pos[parent]
+                
+                if len(anchor_nodes) == 1:
+                    # Direction from anchor to parent
+                    if np.linalg.norm(parent_pos) > 0:
+                        direction = parent_pos / np.linalg.norm(parent_pos)
+                    else:
+                        # Fallback direction if parent is at origin
+                        direction = np.array([1.0, 0.0])
+                else:
+                    # For multiple anchors, use parent position as reference
+                    if np.linalg.norm(parent_pos) > 0:
+                        direction = parent_pos / np.linalg.norm(parent_pos)
+                    else:
+                        direction = np.array([1.0, 0.0])
+                
+                # Position node in the same direction but further out
+                base_position = direction * layer_radius
+                
+                # Add small perpendicular offset for multiple children of same parent
+                siblings = [n for n in nodes_in_layer if parents[n] == parent]
+                if len(siblings) > 1:
+                    sibling_index = siblings.index(node)
+                    total_siblings = len(siblings)
+                    
+                    # Create perpendicular vector
+                    perp_direction = np.array([-direction[1], direction[0]])
+                    
+                    # Spread siblings around the base position
+                    if total_siblings > 1:
+                        offset_range = min(1.5, total_siblings * 0.4)
+                        offset = (sibling_index - (total_siblings - 1) / 2) * (offset_range / max(1, total_siblings - 1))
+                        base_position += perp_direction * offset
+                
+                pos[node] = base_position
+    
+    # Step 6: Position anchors (possibly shifted to accommodate upper branches)
+    if len(anchor_nodes) == 1:
+        anchor = anchor_nodes[0]
+        # Check if we need to shift anchor down
+        max_y = max([pos[node][1] for node in pos.values()] + [0])
+        min_y = min([pos[node][1] for node in pos.values()] + [0])
+        
+        # If there are nodes with high y values, shift anchor down
+        if max_y > 2.0:
+            anchor_y = min_y - 1.0  # Position anchor below the lowest point
+        else:
+            anchor_y = 0.0
+        
+        pos[anchor] = np.array([0.0, anchor_y])
+    else:
+        # Multiple anchors - use pre-calculated positions
+        for anchor in anchor_nodes:
+            pos[anchor] = anchor_positions[anchor]
+    
+    # Step 7: Fine-tune positions to reduce overlaps
+    pos = optimize_directional_layout(G, pos, anchor_nodes, layers, parents)
     
     return pos
 
-def optimize_circular_layout(G, pos, anchor_nodes, layers, max_iterations=100):
+def optimize_directional_layout(G, pos, anchor_nodes, layers, parents, max_iterations=50):
     """
-    Fine-tune the circular layout to reduce edge crossings and improve aesthetics
+    Fine-tune the directional layout to reduce overlaps while maintaining directional flow
     """
     # Convert to numpy arrays for easier manipulation
     nodes = list(pos.keys())
@@ -139,16 +185,44 @@ def optimize_circular_layout(G, pos, anchor_nodes, layers, max_iterations=100):
             
             current_pos = positions[i].copy()
             best_pos = current_pos.copy()
-            best_score = calculate_layout_score(G, positions, nodes, i)
+            best_score = calculate_directional_score(G, positions, nodes, i, parents)
             
-            # Try small perturbations in different directions
-            perturbation_size = 0.3
-            for angle in [0, math.pi/4, math.pi/2, 3*math.pi/4, math.pi, 5*math.pi/4, 3*math.pi/2, 7*math.pi/4]:
-                test_pos = current_pos + perturbation_size * np.array([math.cos(angle), math.sin(angle)])
+            # Try small perturbations, but prefer to stay in the same general direction
+            parent = parents.get(node)
+            if parent and parent in nodes:
+                parent_idx = nodes.index(parent)
+                parent_pos = positions[parent_idx]
+                
+                # Preferred direction: away from parent
+                if np.linalg.norm(current_pos - parent_pos) > 0:
+                    preferred_dir = (current_pos - parent_pos) / np.linalg.norm(current_pos - parent_pos)
+                else:
+                    preferred_dir = np.array([1.0, 0.0])
+                
+                # Try perturbations mainly in preferred direction and perpendicular
+                perp_dir = np.array([-preferred_dir[1], preferred_dir[0]])
+                
+                test_directions = [
+                    preferred_dir * 0.3,  # Further from parent
+                    -preferred_dir * 0.1,  # Slightly closer to parent
+                    perp_dir * 0.2,  # Perpendicular directions
+                    -perp_dir * 0.2,
+                    (preferred_dir + perp_dir) * 0.2,  # Diagonal combinations
+                    (preferred_dir - perp_dir) * 0.2,
+                ]
+            else:
+                # No parent info, try general perturbations
+                perturbation_size = 0.2
+                test_directions = []
+                for angle in [0, math.pi/4, math.pi/2, 3*math.pi/4, math.pi, 5*math.pi/4, 3*math.pi/2, 7*math.pi/4]:
+                    test_directions.append(perturbation_size * np.array([math.cos(angle), math.sin(angle)]))
+            
+            for direction in test_directions:
+                test_pos = current_pos + direction
                 
                 # Temporarily update position
                 positions[i] = test_pos
-                score = calculate_layout_score(G, positions, nodes, i)
+                score = calculate_directional_score(G, positions, nodes, i, parents)
                 
                 if score < best_score:
                     best_score = score
@@ -168,10 +242,10 @@ def optimize_circular_layout(G, pos, anchor_nodes, layers, max_iterations=100):
     
     return optimized_pos
 
-def calculate_layout_score(G, positions, nodes, node_idx):
+def calculate_directional_score(G, positions, nodes, node_idx, parents):
     """
-    Calculate a score for the current layout (lower is better)
-    Considers edge crossings, node overlaps, and edge lengths
+    Calculate a score for the directional layout (lower is better)
+    Considers node overlaps, edge lengths, and directional consistency
     """
     score = 0.0
     node = nodes[node_idx]
@@ -182,8 +256,19 @@ def calculate_layout_score(G, positions, nodes, node_idx):
         if i == node_idx:
             continue
         distance = np.linalg.norm(node_pos - positions[i])
-        if distance < 1.0:  # Minimum desired distance
-            score += (1.0 - distance) ** 2 * 10
+        if distance < 1.2:  # Minimum desired distance
+            score += (1.2 - distance) ** 2 * 15
+    
+    # Penalty for deviating from directional flow
+    parent = parents.get(node)
+    if parent and parent in nodes:
+        parent_idx = nodes.index(parent)
+        parent_pos = positions[parent_idx]
+        
+        # Check if we're moving in the right direction from parent
+        current_dist = np.linalg.norm(node_pos - parent_pos)
+        if current_dist < 1.5:  # Too close to parent
+            score += (1.5 - current_dist) ** 2 * 10
     
     # Penalty for very long edges to connected nodes
     neighbors = set()
@@ -197,9 +282,9 @@ def calculate_layout_score(G, positions, nodes, node_idx):
         if neighbor in nodes:
             neighbor_idx = nodes.index(neighbor)
             edge_length = np.linalg.norm(node_pos - positions[neighbor_idx])
-            # Penalty for edges that are too long (but don't penalize reasonable lengths)
-            if edge_length > 6.0:
-                score += (edge_length - 6.0) ** 2
+            # Penalty for edges that are too long
+            if edge_length > 8.0:
+                score += (edge_length - 8.0) ** 2 * 2
     
     return score
 
@@ -335,9 +420,9 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             edge_width = 2.5
             edge_alpha = 0.8
         
-        # Draw edges with minimal curvature for cleaner circular layout
+        # Draw edges with minimal curvature for cleaner directional layout
         if pattern.is_directed():
-            # Simplified arrow sizing for circular layout
+            # Simplified arrow sizing for directional layout
             if num_nodes >= 30:
                 arrow_size = 15
             elif num_nodes >= 20:
@@ -345,22 +430,13 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             else:
                 arrow_size = 25
             
-            # Draw edges with minimal curvature to maintain circular structure
+            # Draw edges with minimal curvature to maintain directional structure
             for u, v, data in pattern.edges(data=True):
                 edge_type = data.get('type', 'default')
                 edge_color = edge_color_map[edge_type]
                 
-                # Use straight edges for radial connections (anchor to layer 1)
-                # and slight curvature for other edges
-                u_is_anchor = pattern.nodes[u].get('anchor', 0) == 1
-                v_is_anchor = pattern.nodes[v].get('anchor', 0) == 1
-                
-                if u_is_anchor or v_is_anchor:
-                    # Straight edges for anchor connections
-                    connectionstyle = "arc3,rad=0"
-                else:
-                    # Slight curvature for inter-layer connections
-                    connectionstyle = "arc3,rad=0.1"
+                # Use straight edges for most connections in directional layout
+                connectionstyle = "arc3,rad=0.05"  # Very slight curvature for all edges
                 
                 nx.draw_networkx_edges(
                     pattern, pos,
@@ -435,8 +511,8 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     bbox=bbox_props,
                     zorder=10)
         
-        # Edge labels (simplified for circular layout)
-        if num_nodes <= 25 and edge_density < 0.4 and num_edges < 30:
+        # Edge labels - now applied to all layers including second layer and beyond
+        if num_nodes <= 30 and edge_density < 0.6 and num_edges < 50:  # More permissive for directional layout
             edge_labels = {}
             for u, v, data in pattern.edges(data=True):
                 edge_type = (data.get('type') or 
@@ -444,7 +520,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                            data.get('input_label') or
                            data.get('relation') or
                            data.get('edge_type'))
-                if edge_type and len(str(edge_type)) <= 15:
+                if edge_type and len(str(edge_type)) <= 20:  # Slightly longer labels allowed
                     edge_labels[(u, v)] = str(edge_type)
             
             if edge_labels:
