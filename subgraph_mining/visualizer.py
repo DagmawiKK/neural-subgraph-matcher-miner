@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 from collections import defaultdict
 
-def visualize_pattern_graph_new2(pattern, args, count_by_size):
+def visualize_pattern_graph_ext(pattern, args, count_by_size):
     try:
         num_nodes = len(pattern)
         num_edges = pattern.number_of_edges()
