@@ -24,38 +24,28 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             else:
                 figsize = (base_size, base_size * 0.8)
         fig, ax = plt.subplots(figsize=figsize)
-        # Build node labels with smart truncation
+        # Node labels: all attributes, smart truncation
         node_labels = {}
         for n in pattern.nodes():
             node_data = pattern.nodes[n]
             node_id = node_data.get('id', str(n))
             node_label = node_data.get('label', 'unknown')
-            # Start with basic label
-            if num_nodes > 20:
-                # For large graphs, use compact format
-                label_parts = [f"{node_label}:{node_id}"]
-            else:
-                label_parts = [f"{node_label}:{node_id}"]
-            # Add other attributes with smart truncation
-            other_attrs = {k: v for k, v in node_data.items() 
-                          if k not in ['id', 'label', 'anchor'] and v is not None}
-            # if other_attrs:
-            #     for key, value in other_attrs.items():
-            #         if isinstance(value, str):
-            #             # More aggressive truncation for large/dense graphs
-            #             if num_nodes > 25 or edge_density > 0.5:
-            #                 value = value[:4] + "..." if len(value) > 4 else value
-            #             elif num_nodes > 20 or edge_density > 0.3:
-            #                 value = value[:7] + "..." if len(value) > 7 else value
-            #         elif isinstance(value, (int, float)):
-            #             if isinstance(value, float):
-            #                 value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
-            #         # Compact format for large graphs
-            #         if num_nodes > 20:
-            #             label_parts.append(f"{key}:{value}")
-            #         else:
-            #             label_parts.append(f"{key}: {value}")
-            # Join labels appropriately
+            label_parts = [f"{node_label}:{node_id}"]
+            other_attrs = {k: v for k, v in node_data.items() if k not in ['id', 'label', 'anchor'] and v is not None}
+            if other_attrs:
+                for key, value in other_attrs.items():
+                    if isinstance(value, str):
+                        if num_nodes > 25 or edge_density > 0.5:
+                            value = value[:4] + "..." if len(value) > 4 else value
+                        elif num_nodes > 20 or edge_density > 0.3:
+                            value = value[:7] + "..." if len(value) > 7 else value
+                    elif isinstance(value, (int, float)):
+                        if isinstance(value, float):
+                            value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
+                    if num_nodes > 20:
+                        label_parts.append(f"{key}:{value}")
+                    else:
+                        label_parts.append(f"{key}: {value}")
             if num_nodes > 20:
                 node_labels[n] = "; ".join(label_parts)
             else:
@@ -421,7 +411,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     bbox=bbox_props,
                     zorder=10)  # Ensure labels are on top
         # Improved edge label handling - stricter limits for 14+ nodes
-        if num_nodes <= 16 and edge_density < 0.2 and num_edges < 20:
+        if num_nodes <= 25 and edge_density < 0.4 and num_edges < 30:
             edge_labels = {}
             for u, v, data in pattern.edges(data=True):
                 edge_type = (data.get('type') or 
@@ -429,38 +419,16 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                            data.get('input_label') or
                            data.get('relation') or
                            data.get('edge_type'))
-                if edge_type and len(str(edge_type)) <= 12:  # Even shorter limit
+                if edge_type and len(str(edge_type)) <= 15:
                     edge_labels[(u, v)] = str(edge_type)
             if edge_labels:
-                edge_font_size = max(6, font_size - 3)  # Smaller edge labels
-                # Calculate label positions manually to avoid overlaps
-                edge_label_pos = {}
-                for (u, v), label in edge_labels.items():
-                    x1, y1 = pos[u]
-                    x2, y2 = pos[v]
-                    # Place label at 1/3 point along edge to avoid center clustering
-                    label_x = x1 + 0.33 * (x2 - x1)
-                    label_y = y1 + 0.33 * (y2 - y1)
-                    # Add small offset perpendicular to edge
-                    dx, dy = x2 - x1, y2 - y1
-                    length = (dx**2 + dy**2)**0.5
-                    if length > 0:
-                        offset_x = -dy / length * 0.1
-                        offset_y = dx / length * 0.1
-                        label_x += offset_x
-                        label_y += offset_y
-                    edge_label_pos[(u, v)] = (label_x, label_y)
-                # Draw edge labels
-                for (u, v), label in edge_labels.items():
-                    x, y = edge_label_pos[(u, v)]
-                    plt.text(x, y, label,
-                            fontsize=edge_font_size,
-                            fontweight='normal',
-                            color='darkblue',
-                            ha='center', va='center',
-                            bbox=dict(facecolor='white', edgecolor='lightgray', 
-                                    alpha=0.9, boxstyle='round,pad=0.1'),
-                            zorder=5)
+                edge_font_size = max(6, font_size - 2)
+                nx.draw_networkx_edge_labels(pattern, pos, 
+                          edge_labels=edge_labels, 
+                          font_size=edge_font_size, 
+                          font_color='darkblue',
+                          bbox=dict(facecolor='white', edgecolor='lightgray', 
+                                  alpha=0.8, boxstyle='round,pad=0.1'))
         # Create comprehensive title
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
         has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())

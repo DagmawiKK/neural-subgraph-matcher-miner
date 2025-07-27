@@ -446,62 +446,146 @@ def visualize_pattern_graph(pattern, args, count_by_size):
         return False
 
 def visualize_pattern_graph_new(pattern, args, count_by_size):
+
     try:
+
         num_nodes = len(pattern)
+
         num_edges = pattern.number_of_edges()
+
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
 
+
+
         # Adaptive figure sizing
+
+
+
+
         base_size = max(12, min(20, num_nodes * 2))
+
+
         if edge_density > 0.3:  # Dense graph
+
+
             figsize = (base_size * 1.2, base_size)
+
         else:
+
+
             figsize = (base_size, base_size * 0.8)
+
+
+
         fig, ax = plt.subplots(figsize=figsize)
 
+
+
         # Build node labels with smart truncation
+
         node_labels = {}
+
         for n in pattern.nodes():
+
             node_data = pattern.nodes[n]
+
             node_id = node_data.get('id', str(n))
+
             node_label = node_data.get('label', 'unknown')
 
+
+
             # Start with basic label
+
             if num_nodes > 20:
+
                 # For large graphs, use compact format
+
                 label_parts = [f"{node_label}:{node_id}"]
+
             else:
+
                 label_parts = [f"{node_label}:{node_id}"]
+
+
+
             # Add other attributes with smart truncation
+
             other_attrs = {k: v for k, v in node_data.items() 
+
                           if k not in ['id', 'label', 'anchor'] and v is not None}
+
+
+
             if other_attrs:
+
                 for key, value in other_attrs.items():
+
+                    if isinstance(value, str):
+
+                        # More aggressive truncation for large/dense graphs
+
+                        if num_nodes > 25 or edge_density > 0.5:
+
+                            value = value[:4] + "..." if len(value) > 4 else value
+
+                        elif num_nodes > 20 or edge_density > 0.3:
+
+                            value = value[:7] + "..." if len(value) > 7 else value
+
+                        # else:
+
+                        #     value = value[:12] + "..." if len(value) > 12 else value
+
+                    elif isinstance(value, (int, float)):
+
+                        if isinstance(value, float):
+
+                            value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
+
+
+
                     # Compact format for large graphs
+
                     if num_nodes > 20:
+
                         label_parts.append(f"{key}:{value}")
+
                     else:
+
                         label_parts.append(f"{key}: {value}")
+
+
+
             # Join labels appropriately
 
             if num_nodes > 20:
+
                 node_labels[n] = "; ".join(label_parts)
+
             else:
+
                 node_labels[n] = "\n".join(label_parts)
+
+
+
         # Smart layout selection
 
         if num_nodes > 30:
+
             # For very large graphs, use hierarchical layout if directed
 
             if pattern.is_directed():
 
                 try:
+
                     pos = nx.nx_agraph.graphviz_layout(pattern, prog='dot')
+
                     print("Using graphviz_layout")
 
                 except:
 
-                    pos = nx.spring_layout(pattern, k=2.5, seed=42, iterations=150)
+                    pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
 
                     print("Using spring_layout (fallback from graphviz)")
 
@@ -543,6 +627,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
 
         label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
 
+
+
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
 
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
@@ -574,6 +660,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             base_node_size = 7000
 
             anchor_node_size = base_node_size * 1.3
+
+
 
         # Prepare node attributes
 
@@ -786,41 +874,30 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         else:
 
             for u, v, data in pattern.edges(data=True):
+
                 edge_type = data.get('type', 'default')
+
                 edge_color = edge_color_map[edge_type]
+
+
+
                 nx.draw_networkx_edges(
+
                     pattern, pos,
+
                     edgelist=[(u, v)],
+
                     width=edge_width,
+
                     edge_color=[edge_color],
+
                     alpha=edge_alpha,
+
                     arrows=False
+
                 )
 
-        # External drawing for "translates_to" edges
-        translates_edges = [(u, v, data) for u, v, data in pattern.edges(data=True) if data.get('type') == 'translates_to']
-        if translates_edges:
-            # Increase figure size for more space if needed
-            fig.set_size_inches(fig.get_size_inches()[0] * 1.2, fig.get_size_inches()[1] * 1.2)
-            # Get current axis limits
-            x_vals = [pos[n][0] for n in pattern.nodes()]
-            y_vals = [pos[n][1] for n in pattern.nodes()]
-            x_min, x_max = min(x_vals), max(x_vals)
-            y_min, y_max = min(y_vals), max(y_vals)
-            # Place external labels to the right of the graph
-            x_external = x_max + (x_max - x_min) * 0.15
-            y_step = (y_max - y_min) / (len(translates_edges) + 1)
-            for i, (u, v, data) in enumerate(translates_edges):
-                label = "translates_to"
-                ax.annotate("",
-                    xy=pos[v], xytext=pos[u],
-                    arrowprops=dict(arrowstyle='-|>', color='orange', lw=2, connectionstyle="arc3,rad=0.3"),
-                    zorder=3
-                )
-                ax.text(x_external, y_min + y_step * (i + 1), f"{pattern.nodes[u].get('label','')}:{pattern.nodes[u].get('id','')} → {pattern.nodes[v].get('label','')}:{pattern.nodes[v].get('id','')} [{label}]",
-                        fontsize=font_size, color='orange', fontweight='bold',
-                        bbox=dict(facecolor='white', edgecolor='orange', alpha=0.8, boxstyle='round,pad=0.2'),
-                        ha='left', va='center', zorder=10)
+
 
         # Adaptive font sizing
 
@@ -1007,19 +1084,34 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         if len(unique_labels) > 1:
 
             for label, color in label_color_map.items():
+
                 legend_elements.append(
+
                     plt.Line2D([0], [0], marker='o', color='w', 
+
                               markerfacecolor=color, markersize=10, 
+
                               label=f'Node: {label}', markeredgecolor='black')
+
                 )
 
+
+
         # Add anchor node to legend if present
+
         if has_anchors:
+
             legend_elements.append(
+
                 plt.Line2D([0], [0], marker='s', color='w', 
+
                           markerfacecolor='red', markersize=12, 
+
                           label='Anchor Node', markeredgecolor='darkred', linewidth=2)
+
             )
+
+
 
         # Edge type legend
 
@@ -1036,6 +1128,8 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                                   label=f'Edge: {edge_type}')
 
                     )
+
+
 
         # Position legend based on graph size
 
@@ -1122,6 +1216,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         if edge_types:
 
             pattern_info.append('edges-' + '-'.join(edge_types))
+
 
 
         if has_anchors:
