@@ -316,16 +316,16 @@ def visualize_pattern_graph_new2(pattern, args, count_by_size):
             # Adaptive arrow sizing
             if num_nodes >= 30:
                 arrow_size = 15
-                connectionstyle = "arc3,rad=0.35"  # More curvature for large graphs
+                connectionstyle = "arc3,rad=0.15"  # More curvature for large graphs
             elif num_nodes >= 20:
                 arrow_size = 20
-                connectionstyle = "arc3,rad=0.3"
+                connectionstyle = "arc3,rad=0.12"
             elif num_nodes >= 14:
                 arrow_size = 22
-                connectionstyle = "arc3,rad=0.25"  # Good curvature for 14+ nodes
+                connectionstyle = "arc3,rad=0.1"  # Good curvature for 14+ nodes
             else:
                 arrow_size = 25
-                connectionstyle = "arc3,rad=0.2"
+                connectionstyle = "arc3,rad=0.08"
             # Group edges by type for consistent styling
             edges_by_type = {}
             for u, v, data in pattern.edges(data=True):
