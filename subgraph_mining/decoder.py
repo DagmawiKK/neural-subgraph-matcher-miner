@@ -792,9 +792,9 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     borderaxespad=0.,
                     framealpha=0.95,
                     title="Graph Elements",
-                    fontsize=9,
-                    title_fontsize=10
-                )
+                    fontsize=9                )
+                legend.get_title().set_fontsize(font_size + 1)
+
                 plt.tight_layout(rect=[0, 0, 0.82, 1])
             else:
                 # For smaller graphs, put legend in upper right corner
@@ -805,8 +805,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
                     borderaxespad=0.,
                     framealpha=0.95,
                     title="Graph Elements",
-                    fontsize=9,
-                    title_fontsize=10
+                    fontsize=9
                 )
                       
                 legend.get_title().set_fontsize(font_size + 1)
