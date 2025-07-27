@@ -323,18 +323,27 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
         
-        # Adaptive node sizing
-        if num_nodes > 30:
+        # Adaptive node sizing based on number of nodes
+        if num_nodes <= 5:
+            base_node_size = 12000
+            anchor_node_size = base_node_size * 1.3
+        elif num_nodes <= 10:
+            base_node_size = 9000
+            anchor_node_size = base_node_size * 1.4
+        elif num_nodes <= 15:
+            base_node_size = 7000
+            anchor_node_size = base_node_size * 1.4
+        elif num_nodes <= 20:
+            base_node_size = 5500
+            anchor_node_size = base_node_size * 1.4
+        elif num_nodes > 30:
             base_node_size = 3000
             anchor_node_size = base_node_size * 1.5
-        elif num_nodes > 20 or edge_density > 0.5:
+        elif edge_density > 0.5:
             base_node_size = 3500
             anchor_node_size = base_node_size * 1.5
-        elif edge_density > 0.3:
-            base_node_size = 5000
-            anchor_node_size = base_node_size * 1.5
         else:
-            base_node_size = 7000
+            base_node_size = 4500
             anchor_node_size = base_node_size * 1.5
         
         # Prepare node attributes
@@ -459,31 +468,43 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         # Continue with the rest of your original code for labels, legends, etc.
         # (The rest remains the same as your original implementation)
         
-        # Adaptive font sizing
+        # Adaptive font sizing based on number of nodes and attributes
         max_attrs_per_node = max(len([k for k in pattern.nodes[n].keys() 
                                      if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
-        if num_nodes > 30:
+        
+        if num_nodes <= 5:
+            font_size = max(16, min(20, 300 // (num_nodes + max_attrs_per_node * 2)))
+        elif num_nodes <= 10:
+            font_size = max(14, min(18, 250 // (num_nodes + max_attrs_per_node * 2)))
+        elif num_nodes <= 15:
+            font_size = max(12, min(16, 220 // (num_nodes + max_attrs_per_node * 2)))
+        elif num_nodes <= 20:
+            font_size = max(10, min(14, 200 // (num_nodes + max_attrs_per_node * 3)))
+        elif num_nodes > 30:
             font_size = max(6, min(8, 120 // (num_nodes + max_attrs_per_node * 3)))
-        elif num_nodes > 20:
-            font_size = max(7, min(9, 160 // (num_nodes + max_attrs_per_node * 4)))
         elif edge_density > 0.5:
             font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
         else:
-            font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2)))
+            font_size = max(9, min(12, 180 // (num_nodes + max_attrs_per_node * 4)))
         
-        # Draw node labels with improved positioning
+        # Draw node labels with adaptive padding based on node count
         for node, (x, y) in pos.items():
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
             
-            if num_nodes > 25 or edge_density > 0.5:
-                pad = 0.15
-            elif num_nodes > 15:
-                pad = 0.25
-            else:
+            # Adaptive padding based on number of nodes
+            if num_nodes <= 5:
+                pad = 0.4  # Larger padding for small graphs
+            elif num_nodes <= 10:
+                pad = 0.35
+            elif num_nodes <= 15:
                 pad = 0.3
+            elif num_nodes > 25 or edge_density > 0.5:
+                pad = 0.15  # Smaller padding for dense graphs
+            else:
+                pad = 0.25
             
             bbox_props = dict(
                 facecolor='lightcoral' if is_anchor else 'lightblue',
