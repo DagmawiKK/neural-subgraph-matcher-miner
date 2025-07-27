@@ -144,8 +144,8 @@ def get_anchor_centered_layout(G):
     if len(anchor_nodes) == 1:
         anchor = anchor_nodes[0]
         # Check if we need to shift anchor down
-        max_y = max([pos[node][1] for node in pos.values()] + [0])
-        min_y = min([pos[node][1] for node in pos.values()] + [0])
+        max_y = max([p[1] for p in pos.values()] + [0])
+        min_y = min([p[1] for p in pos.values()] + [0])
         
         # If there are nodes with high y values, shift anchor down
         if max_y > 2.0:
