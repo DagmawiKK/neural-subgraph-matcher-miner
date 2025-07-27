@@ -326,19 +326,12 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
         # Increased figure sizing for better spacing
-        if num_nodes >= 14:
-            base_size = max(14, min(24, num_nodes * 2.5))
-            if edge_density > 0.3:
-                figsize = (base_size * 1.4, base_size * 1.2)
-            else:
-                figsize = (base_size * 1.3, base_size * 1.1)
+        base_size = max(12, min(20, num_nodes * 2))
+        if edge_density > 0.3:  # Dense graph
+            figsize = (base_size * 1.2, base_size)
         else:
-            base_size = max(12, min(20, num_nodes * 2))
-            if edge_density > 0.3:
-                figsize = (base_size * 1.2, base_size)
-            else:
-                figsize = (base_size, base_size * 0.8)
-        
+            figsize = (base_size, base_size * 0.8)
+                
         fig, ax = plt.subplots(figsize=figsize)
         
         # Node labels: all attributes, smart truncation
