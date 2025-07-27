@@ -749,7 +749,7 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
         title = f"{graph_type} Pattern Graph{anchor_info}\n"
         title += f"({num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
         
-        plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold', pad=20)
+        plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold')
         plt.axis('off')
 
         # Create legends
@@ -1005,7 +1005,7 @@ def pattern_growth(dataset, task, args):
     
     successful_visualizations = 0
     for pattern in out_graphs:
-        if visualize_pattern_graph(pattern, args, count_by_size):
+        if visualize_pattern_graph_new(pattern, args, count_by_size):
             successful_visualizations += 1
         count_by_size[len(pattern)] += 1
 
