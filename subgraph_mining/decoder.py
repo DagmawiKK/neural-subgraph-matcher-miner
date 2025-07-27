@@ -980,10 +980,10 @@ def visualize_pattern_graph_newer(pattern, args, count_by_size):
         print("--- LOG: Drawing edge labels...")
         edge_labels = {(u, v): d.get('type', '') for u, v, d in pattern.edges(data=True)}
         nx.draw_networkx_edge_labels(pattern, pos, edge_labels=edge_labels, font_size=8, font_color='black',
-                                     rotate=False, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=1))
+                                     rotate=False, bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Title and final setup
-        plt.title(f"Directed Pattern Graph ({num_nodes} nodes, {num_edges} edges)", fontsize=20, fontweight='bold', pad=20)
+        plt.title(f"Directed Pattern Graph ({num_nodes} nodes, {num_edges} edges)", fontsize=20, fontweight='bold')
         plt.axis('off')
         plt.tight_layout()
 
