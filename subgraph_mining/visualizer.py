@@ -33,14 +33,16 @@ def get_anchor_centered_layout(G):
     
     # Step 2: Build parent-child relationships and calculate distances
     distances = {}
-    parents = {}  # Track immediate parent for directional positioning
+    all_parents = {}  # Track ALL parents for nodes with multiple connections
+    primary_parent = {}  # Track primary parent (first discovered) for positioning
     visited = set()
     queue = deque()
     
     # Initialize with anchor nodes at distance 0
     for anchor in anchor_nodes:
         distances[anchor] = 0
-        parents[anchor] = None
+        all_parents[anchor] = []
+        primary_parent[anchor] = None
         queue.append((anchor, 0, None))  # (node, distance, parent)
         visited.add(anchor)
     
@@ -57,9 +59,15 @@ def get_anchor_centered_layout(G):
         for neighbor in neighbors:
             if neighbor not in visited:
                 distances[neighbor] = dist + 1
-                parents[neighbor] = node
+                all_parents[neighbor] = [node]
+                primary_parent[neighbor] = node
                 queue.append((neighbor, dist + 1, node))
                 visited.add(neighbor)
+            elif neighbor in distances and distances[neighbor] == dist + 1:
+                # Same distance - this is an additional parent at the same layer
+                if neighbor not in all_parents:
+                    all_parents[neighbor] = []
+                all_parents[neighbor].append(node)
     
     # Step 3: Group nodes by distance (layers)
     layers = defaultdict(list)
@@ -87,7 +95,7 @@ def get_anchor_centered_layout(G):
                 base_radius * math.sin(angle)
             ])
     
-    # Step 5: Position subsequent layers radially outward from their parents
+    # Step 5: Position subsequent layers with special handling for multi-parent nodes
     radius_increment = 3.5
     
     for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
@@ -97,44 +105,77 @@ def get_anchor_centered_layout(G):
         nodes_in_layer = layers[layer_dist]
         
         for node in nodes_in_layer:
-            parent = parents[node]
-            if parent in pos:
-                parent_pos = pos[parent]
-                
-                # Calculate the radial direction from center through parent
-                if np.linalg.norm(parent_pos) > 0:
-                    # Direction from center through parent
-                    radial_direction = parent_pos / np.linalg.norm(parent_pos)
-                else:
-                    # Fallback direction if parent is at center
-                    radial_direction = np.array([1.0, 0.0])
-                
-                # Calculate distance for this layer
-                layer_distance = base_radius + (layer_dist - 1) * radius_increment
-                
-                # Base position along the radial line
-                base_position = radial_direction * layer_distance
-                
-                # Handle multiple children of the same parent
-                siblings = [n for n in nodes_in_layer if parents[n] == parent]
-                if len(siblings) > 1:
-                    sibling_index = siblings.index(node)
-                    total_siblings = len(siblings)
+            parents_list = all_parents.get(node, [])
+            
+            if len(parents_list) == 1:
+                # Single parent - use original radial positioning
+                parent = parents_list[0]
+                if parent in pos:
+                    parent_pos = pos[parent]
                     
-                    # Create perpendicular vector for spreading siblings
-                    perp_direction = np.array([-radial_direction[1], radial_direction[0]])
+                    # Calculate the radial direction from center through parent
+                    if np.linalg.norm(parent_pos) > 0:
+                        radial_direction = parent_pos / np.linalg.norm(parent_pos)
+                    else:
+                        radial_direction = np.array([1.0, 0.0])
                     
-                    # Spread siblings around the radial line
-                    if total_siblings > 1:
-                        # Adjust spread based on layer distance (farther layers can spread more)
-                        spread_factor = min(2.0, layer_distance * 0.3)
-                        offset = (sibling_index - (total_siblings - 1) / 2) * (spread_factor / max(1, total_siblings - 1))
-                        base_position += perp_direction * offset
+                    # Calculate distance for this layer
+                    layer_distance = base_radius + (layer_dist - 1) * radius_increment
+                    base_position = radial_direction * layer_distance
+                    
+                    # Handle siblings
+                    siblings = [n for n in nodes_in_layer if len(all_parents.get(n, [])) == 1 and all_parents.get(n, [])[0] == parent]
+                    if len(siblings) > 1:
+                        sibling_index = siblings.index(node)
+                        total_siblings = len(siblings)
+                        perp_direction = np.array([-radial_direction[1], radial_direction[0]])
+                        if total_siblings > 1:
+                            spread_factor = min(2.0, layer_distance * 0.3)
+                            offset = (sibling_index - (total_siblings - 1) / 2) * (spread_factor / max(1, total_siblings - 1))
+                            base_position += perp_direction * offset
+                    
+                    pos[node] = base_position
+                    
+            elif len(parents_list) > 1:
+                # Multiple parents - position at centroid of parents, then move outward
+                parent_positions = []
+                for parent in parents_list:
+                    if parent in pos:
+                        parent_positions.append(pos[parent])
                 
-                pos[node] = base_position
+                if parent_positions:
+                    # Calculate centroid of parent positions
+                    centroid = np.mean(parent_positions, axis=0)
+                    
+                    # Direction from center through centroid
+                    if np.linalg.norm(centroid) > 0:
+                        direction = centroid / np.linalg.norm(centroid)
+                    else:
+                        direction = np.array([1.0, 0.0])
+                    
+                    # Position at appropriate distance
+                    layer_distance = base_radius + (layer_dist - 1) * radius_increment
+                    
+                    # For diamond patterns, place slightly closer to maintain visual connection
+                    if len(parents_list) == 2:
+                        # Check if parents are roughly opposite each other (diamond pattern)
+                        if len(parent_positions) == 2:
+                            p1, p2 = parent_positions
+                            # Calculate angle between parents from center
+                            if np.linalg.norm(p1) > 0 and np.linalg.norm(p2) > 0:
+                                dir1 = p1 / np.linalg.norm(p1)
+                                dir2 = p2 / np.linalg.norm(p2)
+                                dot_product = np.clip(np.dot(dir1, dir2), -1.0, 1.0)
+                                angle_between = math.acos(dot_product)
+                                
+                                # If parents are far apart (> 90 degrees), bring node closer
+                                if angle_between > math.pi / 2:
+                                    layer_distance *= 0.8  # Bring closer for diamond pattern
+                    
+                    pos[node] = direction * layer_distance
     
     # Step 6: Optimize positions to reduce overlaps while maintaining radial structure
-    pos = optimize_radial_layout(G, pos, anchor_nodes, layers, parents)
+    pos = optimize_radial_layout(G, pos, anchor_nodes, layers, primary_parent)
     
     return pos
 
