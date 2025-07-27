@@ -511,17 +511,25 @@ def visualize_pattern_graph_new(pattern, args, count_by_size):
             if pattern.is_directed():
                 try:
                     pos = nx.nx_agraph.graphviz_layout(pattern, prog='dot')
+                    print("Using graphviz_layout")
                 except:
                     pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
+                    print("Using spring_layout (fallback from graphviz)")
             else:
                 pos = nx.spring_layout(pattern, k=4.0, seed=42, iterations=200)
+                print("Using spring_layout for large undirected")
         elif edge_density > 0.4 or num_nodes > 20:
             if num_nodes <= 25:
                 pos = nx.circular_layout(pattern, scale=4)
+                print("Using circular_layout")
             else:
                 pos = nx.spring_layout(pattern, k=3.5, seed=42, iterations=150)
+                print("Using spring_layout for medium graph")
         else:
             pos = nx.spring_layout(pattern, k=2.5, seed=42, iterations=100)
+            print("Using spring_layout for small/sparse graph")
+        print("pos:", pos)
+        print("num_nodes:", num_nodes, "num_edges:", num_edges, "edge_density:", edge_density)
 
         # Color mapping
         unique_labels = sorted(set(pattern.nodes[n].get('label', 'unknown') for n in pattern.nodes()))
@@ -998,6 +1006,10 @@ def pattern_growth(dataset, task, args):
     count_by_size = defaultdict(int)
     warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
     
+    print(f"Number of patterns discovered: {len(out_graphs)}")  # <-- Add here
+    count_15_20 = sum(15 <= len(pattern) <= 20 for pattern in out_graphs)
+    print(f"Number of patterns with 15-20 nodes: {count_15_20}")
+
     successful_visualizations = 0
     for pattern in out_graphs:
         if visualize_pattern_graph_new(pattern, args, count_by_size):
