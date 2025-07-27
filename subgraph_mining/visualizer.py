@@ -449,6 +449,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     zorder=10)  # Ensure labels are on top
         
         # Draw edge labels (for eligible edges)
+        edge_font_size = max(7, font_size - 2)
         for (u, v), label in edge_labels.items():
             # Calculate label positions manually to avoid overlaps
             x1, y1 = pos[u]
