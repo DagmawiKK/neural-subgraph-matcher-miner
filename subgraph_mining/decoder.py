@@ -25,6 +25,7 @@ from common import data
 from common import models
 from common import utils
 from common import combined_syn
+from subgraph_mining.visualizer import visualize_pattern_graph_ext
 from subgraph_mining.config import parse_decoder
 from subgraph_matching.config import parse_encoder
 from subgraph_mining.search_agents import GreedySearchAgent, MCTSSearchAgent, MemoryEfficientMCTSAgent, MemoryEfficientGreedyAgent, BeamSearchAgent
@@ -1331,7 +1332,7 @@ def pattern_growth(dataset, task, args):
 
     successful_visualizations = 0
     for pattern in out_graphs:
-        if visualize_pattern_graph_new(pattern, args, count_by_size):
+        if visualize_pattern_graph_ext(pattern, args, count_by_size):
             successful_visualizations += 1
         count_by_size[len(pattern)] += 1
 
