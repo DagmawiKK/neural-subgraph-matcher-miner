@@ -5,10 +5,6 @@ from collections import defaultdict, deque
 import math
 
 def get_anchor_centered_layout(G):
-    """
-    Create a radial layout with anchor at center, first layer in circle,
-    and subsequent layers extending outward like branches from a vase
-    """
     # Find anchor nodes
     anchor_nodes = [n for n in G.nodes() if G.nodes[n].get('anchor', 0) == 1]
     
@@ -18,7 +14,7 @@ def get_anchor_centered_layout(G):
     
     pos = {}
     
-    # Step 1: Position anchor nodes at center
+    # Position anchor nodes at center
     if len(anchor_nodes) == 1:
         pos[anchor_nodes[0]] = np.array([0.0, 0.0])
     else:
@@ -31,10 +27,9 @@ def get_anchor_centered_layout(G):
                 anchor_radius * math.sin(angle)
             ])
     
-    # Step 2: Build parent-child relationships and calculate distances
     distances = {}
-    all_parents = {}  # Track ALL parents for nodes with multiple connections
-    primary_parent = {}  # Track primary parent (first discovered) for positioning
+    all_parents = {}  
+    primary_parent = {} 
     visited = set()
     queue = deque()
     
@@ -69,12 +64,12 @@ def get_anchor_centered_layout(G):
                     all_parents[neighbor] = []
                 all_parents[neighbor].append(node)
     
-    # Step 3: Group nodes by distance (layers)
+    # Group nodes by distance (layers)
     layers = defaultdict(list)
     for node, dist in distances.items():
         layers[dist].append(node)
     
-    # Step 4: Position Layer 1 in a perfect circle around anchor(s)
+    # Position Layer 1 in a perfect circle around anchor(s)
     base_radius = 3.0
     if 1 in layers:
         layer_1_nodes = layers[1]
@@ -95,7 +90,6 @@ def get_anchor_centered_layout(G):
                 base_radius * math.sin(angle)
             ])
     
-    # Step 5: Position subsequent layers with special handling for multi-parent nodes
     radius_increment = 3.5
     
     for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
@@ -174,15 +168,11 @@ def get_anchor_centered_layout(G):
                     
                     pos[node] = direction * layer_distance
     
-    # Step 6: Optimize positions to reduce overlaps while maintaining radial structure
     pos = optimize_radial_layout(G, pos, anchor_nodes, layers, primary_parent)
     
     return pos
 
 def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations=50):
-    """
-    Fine-tune the radial layout to reduce overlaps while maintaining the vase-like structure
-    """
     # Convert to numpy arrays for easier manipulation
     nodes = list(pos.keys())
     positions = np.array([pos[node] for node in nodes])
@@ -214,11 +204,11 @@ def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations
                     
                     # Try small adjustments: radial (in/out) and perpendicular (around circle)
                     test_directions = [
-                        perp_dir * 0.3,      # Around the circle
-                        -perp_dir * 0.3,     # Other direction around circle
-                        radial_dir * 0.2,    # Slightly further out
-                        -radial_dir * 0.1,   # Slightly closer in
-                        (perp_dir + radial_dir) * 0.2,  # Diagonal adjustments
+                        perp_dir * 0.3,      
+                        -perp_dir * 0.3,     
+                        radial_dir * 0.2,    
+                        -radial_dir * 0.1,   
+                        (perp_dir + radial_dir) * 0.2,  
                         (perp_dir - radial_dir) * 0.2,
                     ]
                 else:
@@ -325,14 +315,6 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         num_edges = pattern.number_of_edges()
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
-        # Increased figure sizing for better spacing
-        # if num_nodes >= 14:
-        #     base_size = max(14, min(24, num_nodes * 2.5))
-        #     if edge_density > 0.3:
-        #         figsize = (base_size * 1.4, base_size * 1.2)
-        #     else:
-        #         figsize = (base_size * 1.3, base_size * 1.1)
-        # else:
         base_size = max(12, min(20, num_nodes * 2))
         if edge_density > 0.3:
             figsize = (base_size * 1.2, base_size)
@@ -363,34 +345,10 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         label_color_map = {label: plt.cm.Set3(i) for i, label in enumerate(unique_labels)}
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
-        
 
-        base_node_size = 10000  # Large for small graphs
+        base_node_size = 9000  # Large for small graphs
         anchor_node_size = base_node_size * 1.2
-        # # FIXED: Better node sizing - larger nodes for smaller graphs, ensuring visibility
-        # if num_nodes <= 5:
-        #     base_node_size = 12000  # Much larger for very small graphs
-        #     anchor_node_size = base_node_size * 1.2
-        # elif num_nodes <= 8:
-        #     base_node_size = 10000  # Large for small graphs
-        #     anchor_node_size = base_node_size * 1.2
-        # elif num_nodes <= 12:
-        #     base_node_size = 8000   # Medium-large for medium-small graphs
-        #     anchor_node_size = base_node_size * 1.2
-        # elif num_nodes <= 15:
-        #     base_node_size = 6500   # Medium for medium graphs
-        #     anchor_node_size = base_node_size * 1.2
-        # elif num_nodes <= 20:
-        #     base_node_size = 5000   # Original size for reference
-        #     anchor_node_size = base_node_size * 1.3
-        # elif num_nodes <= 30:
-        #     base_node_size = 3500
-        #     anchor_node_size = base_node_size * 1.3
-        # else:
-        #     base_node_size = 3000
-        #     anchor_node_size = base_node_size * 1.3
-        
-        # Prepare node attributes
+
         colors = []
         node_sizes = []
         shapes = []
@@ -479,7 +437,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                 edge_color = edge_color_map[edge_type]
                 
                 # Use straight edges for most connections in directional layout
-                connectionstyle = "arc3,rad=0.05"  # Very slight curvature for all edges
+                connectionstyle = "arc3,rad=0.05" 
                 
                 nx.draw_networkx_edges(
                     pattern, pos,
@@ -509,51 +467,17 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     arrows=False
                 )
         
-        # FIXED: Better font sizing - smaller fonts for smaller graphs to prevent overlap
+        # smaller fonts for smaller graphs to prevent overlap
         max_attrs_per_node = max(len([k for k in pattern.nodes[n].keys() 
                                     if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
-        font_size = max(9, min(11, 80 // (max_attrs_per_node + 1)))
-        # # Improved font sizing logic - smaller fonts for smaller node counts
-        # if num_nodes <= 5:
-        #     font_size = max(8, min(10, 60 // (max_attrs_per_node + 1)))  # Smaller font for very small graphs
-        # elif num_nodes <= 8:
-        #     font_size = max(9, min(11, 80 // (max_attrs_per_node + 1)))  # Small font for small graphs
-        # elif num_nodes <= 12:
-        #     font_size = max(10, min(12, 100 // (max_attrs_per_node + 1))) # Medium-small font
-        # elif num_nodes <= 15:
-        #     font_size = max(11, min(13, 120 // (max_attrs_per_node + 1))) # Medium font
-        # elif num_nodes <= 20:
-        #     font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2))) # Original reference
-        # elif num_nodes > 30:
-        #     font_size = max(6, min(8, 120 // (num_nodes + max_attrs_per_node * 3)))
-        # elif edge_density > 0.5:
-        #     font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
-        # else:
-        #     font_size = max(9, min(11, 160 // (num_nodes + max_attrs_per_node * 4)))
-        
-        # Draw node labels with adaptive padding based on node count
+        font_size = max(8, min(11, 80 // (max_attrs_per_node + 1)))
+
         for node, (x, y) in pos.items():
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
             pad = 0.3 
-            # # FIXED: Better padding - smaller padding for small graphs to fit better
-            # if num_nodes <= 5:
-            #     pad = 0.25  # Smaller padding for very small graphs
-            # elif num_nodes <= 8:
-            #     pad = 0.3   # Small padding
-            # elif num_nodes <= 12:
-            #     pad = 0.35  # Medium-small padding
-            # elif num_nodes <= 15:
-            #     pad = 0.4   # Medium padding
-            # elif num_nodes <= 20:
-            #     pad = 0.4   # Reference padding
-            # elif num_nodes > 25 or edge_density > 0.5:
-            #     pad = 0.15  # Smaller padding for dense graphs
-            # else:
-            #     pad = 0.25
-            
             bbox_props = dict(
                 facecolor='lightcoral' if is_anchor else 'lightblue',
                 edgecolor='darkred' if is_anchor else 'navy',
@@ -570,26 +494,25 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     bbox=bbox_props,
                     zorder=10)
         
-        # Edge labels - now applied to all layers including second layer and beyond
-        if num_nodes <= 30 and edge_density < 0.6 and num_edges < 50:  # More permissive for directional layout
-            edge_labels = {}
-            for u, v, data in pattern.edges(data=True):
-                edge_type = (data.get('type') or 
-                           data.get('label') or 
-                           data.get('input_label') or
-                           data.get('relation') or
-                           data.get('edge_type'))
-                if edge_type and len(str(edge_type)) <= 20:  # Slightly longer labels allowed
-                    edge_labels[(u, v)] = str(edge_type)
-            
-            if edge_labels:
-                edge_font_size = max(6, font_size - 2)
-                nx.draw_networkx_edge_labels(pattern, pos, 
-                          edge_labels=edge_labels, 
-                          font_size=edge_font_size, 
-                          font_color='darkblue',
-                          bbox=dict(facecolor='white', edgecolor='lightgray', 
-                                  alpha=0.8, boxstyle='round,pad=0.1'))
+        # Edge labels 
+        edge_labels = {}
+        for u, v, data in pattern.edges(data=True):
+            edge_type = (data.get('type') or 
+                        data.get('label') or 
+                        data.get('input_label') or
+                        data.get('relation') or
+                        data.get('edge_type'))
+            if edge_type and len(str(edge_type)) <= 20: 
+                edge_labels[(u, v)] = str(edge_type)
+        
+        if edge_labels:
+            edge_font_size = max(6, font_size - 2)
+            nx.draw_networkx_edge_labels(pattern, pos, 
+                        edge_labels=edge_labels, 
+                        font_size=edge_font_size, 
+                        font_color='darkblue',
+                        bbox=dict(facecolor='white', edgecolor='lightgray', 
+                                alpha=0.8, boxstyle='round,pad=0.1'))
         
         # Create comprehensive title
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
@@ -612,7 +535,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold')
         plt.axis('off')
         
-        # Create legends (keeping your original legend code)
+        # Create legends
         legend_elements = []
         
         if len(unique_labels) > 1:
@@ -666,7 +589,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         else:
             plt.tight_layout()
         
-        # Generate filename (keeping your original filename generation)
+        # Generate filename
         pattern_info = [f"{num_nodes}-{count_by_size[num_nodes]}"]
         node_types = sorted(set(pattern.nodes[n].get('label', '') for n in pattern.nodes() if pattern.nodes[n].get('label', '')))
         if node_types:
