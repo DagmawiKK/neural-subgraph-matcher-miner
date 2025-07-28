@@ -70,7 +70,13 @@ def get_anchor_centered_layout(G):
         layers[dist].append(node)
     
     # Position Layer 1 in a perfect circle around anchor(s)
-    base_radius = 3.0
+    num_nodes = len(G)
+    if num_nodes <= 8:
+        base_radius = 6.0    # Increased for small graphs
+        radius_increment = 5.5
+    else:
+        base_radius = 3.0
+        radius_increment = 3.5
     if 1 in layers:
         layer_1_nodes = layers[1]
         num_layer1 = len(layer_1_nodes)
@@ -90,7 +96,7 @@ def get_anchor_centered_layout(G):
                 base_radius * math.sin(angle)
             ])
     
-    radius_increment = 3.5
+    # radius_increment = 3.5
     
     for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
         if layer_dist not in layers:
