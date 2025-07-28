@@ -563,45 +563,11 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         
         # Position legend
         if legend_elements:
-            positions = np.array(list(pos.values()))
-            x_vals, y_vals = positions[:, 0], positions[:, 1]
-
-            # Get plot limits
-            x_min, x_max = x_vals.min(), x_vals.max()
-            y_min, y_max = y_vals.min(), y_vals.max()
-
-            # Define corners
-            corners = {
-                'upper right': (x_max, y_max),
-                'upper left': (x_min, y_max),
-                'lower left': (x_min, y_min),
-                'lower right': (x_max, y_min)
-            }
-
-            # Measure distance from each node to each corner
-            corner_scores = {}
-            for name, (cx, cy) in corners.items():
-                dists = np.sqrt((x_vals - cx)**2 + (y_vals - cy)**2)
-                # Score: minimum distance to any node (higher = more open)
-                corner_scores[name] = dists.min()
-
-            # Pick the corner with the highest score (most open)
-            best_corner = max(corner_scores, key=corner_scores.get)
-
-            # Place legend in that corner
-            legend_locs = {
-                'upper right': (1.02, 1.02),
-                'upper left': (0.2, 1.02),
-                'lower left': (0.2, 0.2),
-                'lower right': (1.02, 0.2)
-            }
-            legend_loc = best_corner
-            bbox_anchor = legend_locs[legend_loc]
             if num_nodes >= 25:
                 legend = plt.legend(
                     handles=legend_elements,
                     loc='center left',
-                    bbox_to_anchor=bbox_anchor,
+                    bbox_to_anchor=(1.02, 0.5),
                     borderaxespad=0.,
                     framealpha=0.95,
                     title="Graph Elements",
@@ -612,7 +578,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                 legend = plt.legend(
                     handles=legend_elements,
                     loc='upper right',
-                    bbox_to_anchor=bbox_anchor,
+                    bbox_to_anchor=(0.02, 0.98),
                     borderaxespad=0.,
                     framealpha=0.95,
                     title="Graph Elements",
