@@ -326,18 +326,18 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         edge_density = num_edges / (num_nodes * (num_nodes - 1)) if num_nodes > 1 else 0
         
         # Increased figure sizing for better spacing
-        if num_nodes >= 14:
-            base_size = max(14, min(24, num_nodes * 2.5))
-            if edge_density > 0.3:
-                figsize = (base_size * 1.4, base_size * 1.2)
-            else:
-                figsize = (base_size * 1.3, base_size * 1.1)
+        # if num_nodes >= 14:
+        base_size = max(14, min(24, num_nodes * 2.5))
+        if edge_density > 0.3:
+            figsize = (base_size * 1.4, base_size * 1.2)
         else:
-            base_size = max(12, min(20, num_nodes * 2))
-            if edge_density > 0.3:
-                figsize = (base_size * 1.2, base_size)
-            else:
-                figsize = (base_size, base_size * 0.8)
+            figsize = (base_size * 1.3, base_size * 1.1)
+        # else:
+        #     base_size = max(12, min(20, num_nodes * 2))
+        #     if edge_density > 0.3:
+        #         figsize = (base_size * 1.2, base_size)
+        #     else:
+        #         figsize = (base_size, base_size * 0.8)
         
         fig, ax = plt.subplots(figsize=figsize)
         
@@ -364,27 +364,18 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         unique_edge_types = sorted(set(data.get('type', 'default') for u, v, data in pattern.edges(data=True)))
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
         
-        # FIXED: Better node sizing - larger nodes for smaller graphs, ensuring visibility
-        if num_nodes <= 5:
-            base_node_size = 12000  # Much larger for very small graphs
-            anchor_node_size = base_node_size * 1.2
-        elif num_nodes <= 8:
-            base_node_size = 10000  # Large for small graphs
-            anchor_node_size = base_node_size * 1.2
-        elif num_nodes <= 12:
-            base_node_size = 8000   # Medium-large for medium-small graphs
-            anchor_node_size = base_node_size * 1.2
-        elif num_nodes <= 15:
-            base_node_size = 6500   # Medium for medium graphs
-            anchor_node_size = base_node_size * 1.2
-        elif num_nodes <= 20:
-            base_node_size = 5000   # Original size for reference
+        # Adaptive node sizing based on number of nodes
+        if num_nodes > 30:
+            base_node_size = 3000
             anchor_node_size = base_node_size * 1.3
-        elif num_nodes <= 30:
+        elif num_nodes > 20 or edge_density > 0.5:
             base_node_size = 3500
             anchor_node_size = base_node_size * 1.3
+        elif edge_density > 0.3:
+            base_node_size = 5000
+            anchor_node_size = base_node_size * 1.3
         else:
-            base_node_size = 3000
+            base_node_size = 7000
             anchor_node_size = base_node_size * 1.3
         
         # Prepare node attributes
@@ -506,28 +497,20 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     arrows=False
                 )
         
-        # FIXED: Better font sizing - smaller fonts for smaller graphs to prevent overlap
+        # Continue with the rest of your original code for labels, legends, etc.
+        # (The rest remains the same as your original implementation)
+        
         max_attrs_per_node = max(len([k for k in pattern.nodes[n].keys() 
                                     if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
                                 for n in pattern.nodes())
-        
-        # Improved font sizing logic - smaller fonts for smaller node counts
-        if num_nodes <= 5:
-            font_size = max(8, min(10, 60 // (max_attrs_per_node + 1)))  # Smaller font for very small graphs
-        elif num_nodes <= 8:
-            font_size = max(9, min(11, 80 // (max_attrs_per_node + 1)))  # Small font for small graphs
-        elif num_nodes <= 12:
-            font_size = max(10, min(12, 100 // (max_attrs_per_node + 1))) # Medium-small font
-        elif num_nodes <= 15:
-            font_size = max(11, min(13, 120 // (max_attrs_per_node + 1))) # Medium font
-        elif num_nodes <= 20:
-            font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2))) # Original reference
-        elif num_nodes > 30:
+        if num_nodes > 30:
             font_size = max(6, min(8, 120 // (num_nodes + max_attrs_per_node * 3)))
+        elif num_nodes > 20:
+            font_size = max(7, min(9, 160 // (num_nodes + max_attrs_per_node * 4)))
         elif edge_density > 0.5:
             font_size = max(8, min(10, 200 // (num_nodes + max_attrs_per_node * 5)))
         else:
-            font_size = max(9, min(11, 160 // (num_nodes + max_attrs_per_node * 4)))
+            font_size = max(12, min(14, 250 // (num_nodes + max_attrs_per_node * 2)))
         
         # Draw node labels with adaptive padding based on node count
         for node, (x, y) in pos.items():
@@ -535,17 +518,13 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
             
-            # FIXED: Better padding - smaller padding for small graphs to fit better
+            # Adaptive padding based on number of nodes
             if num_nodes <= 5:
-                pad = 0.25  # Smaller padding for very small graphs
-            elif num_nodes <= 8:
-                pad = 0.3   # Small padding
-            elif num_nodes <= 12:
-                pad = 0.35  # Medium-small padding
+                pad = 0.4  # Larger padding for small graphs
+            elif num_nodes <= 10:
+                pad = 0.35
             elif num_nodes <= 15:
-                pad = 0.4   # Medium padding
-            elif num_nodes <= 20:
-                pad = 0.4   # Reference padding
+                pad = 0.3
             elif num_nodes > 25 or edge_density > 0.5:
                 pad = 0.15  # Smaller padding for dense graphs
             else:
@@ -646,6 +625,18 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     framealpha=0.95,
                     title="Graph Elements",
                     fontsize=9)
+                legend.get_title().set_fontsize(font_size + 1)
+                plt.tight_layout(rect=[0, 0, 0.85, 1])
+            elif num_nodes >= 14:
+                legend = plt.legend(
+                    handles=legend_elements,
+                    loc='center left',
+                    bbox_to_anchor=(1.01, 0.5),
+                    borderaxespad=0.,
+                    framealpha=0.95,
+                    title="Graph Elements",
+                    fontsize=9
+                )
                 legend.get_title().set_fontsize(font_size + 1)
                 plt.tight_layout(rect=[0, 0, 0.87, 1])
             else:
