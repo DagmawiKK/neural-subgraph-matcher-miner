@@ -697,4 +697,4 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         print(f"Error visualizing pattern with {len(pattern)} nodes: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        return Falses
