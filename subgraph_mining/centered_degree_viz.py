@@ -3,29 +3,22 @@ import networkx as nx
 import numpy as np
 from collections import defaultdict, deque
 import math
+import traceback
 
 def get_anchor_centered_layout(G):
-    # Find anchor nodes
-    anchor_nodes = [n for n in G.nodes() if G.nodes[n].get('anchor', 0) == 1]
+    # Find the node with highest degree instead of anchor nodes
+    degrees = dict(G.degree())
+    highest_degree_node = max(degrees, key=degrees.get)
+    center_nodes = [highest_degree_node]
     
-    if not anchor_nodes:
-        # Fallback to spring layout if no anchors
+    if not center_nodes:
+        # Fallback to spring layout if no nodes
         return nx.spring_layout(G, k=3.0, seed=42, iterations=150)
     
     pos = {}
     
-    # Position anchor nodes at center
-    if len(anchor_nodes) == 1:
-        pos[anchor_nodes[0]] = np.array([0.0, 0.0])
-    else:
-        # Multiple anchors in small circle at center
-        anchor_radius = 0.5
-        for i, anchor in enumerate(anchor_nodes):
-            angle = 2 * math.pi * i / len(anchor_nodes)
-            pos[anchor] = np.array([
-                anchor_radius * math.cos(angle),
-                anchor_radius * math.sin(angle)
-            ])
+    # Position highest degree node at center
+    pos[center_nodes[0]] = np.array([0.0, 0.0])
     
     distances = {}
     all_parents = {}  
@@ -33,13 +26,13 @@ def get_anchor_centered_layout(G):
     visited = set()
     queue = deque()
     
-    # Initialize with anchor nodes at distance 0
-    for anchor in anchor_nodes:
-        distances[anchor] = 0
-        all_parents[anchor] = []
-        primary_parent[anchor] = None
-        queue.append((anchor, 0, None))  # (node, distance, parent)
-        visited.add(anchor)
+    # Initialize with center node at distance 0
+    for center_node in center_nodes:
+        distances[center_node] = 0
+        all_parents[center_node] = []
+        primary_parent[center_node] = None
+        queue.append((center_node, 0, None))  # (node, distance, parent)
+        visited.add(center_node)
     
     # BFS to find shortest distance and parent relationships
     while queue:
@@ -69,7 +62,7 @@ def get_anchor_centered_layout(G):
     for node, dist in distances.items():
         layers[dist].append(node)
     
-    # Position Layer 1 in a perfect circle around anchor(s)
+    # Position Layer 1 in a perfect circle around center node
     num_nodes = len(G)
     if num_nodes <= 8:
         base_radius = 6.0    # Increased for small graphs
@@ -95,8 +88,6 @@ def get_anchor_centered_layout(G):
                 base_radius * math.cos(angle),
                 base_radius * math.sin(angle)
             ])
-    
-    # radius_increment = 3.5
     
     for layer_dist in range(2, max(layers.keys()) + 1 if layers else 2):
         if layer_dist not in layers:
@@ -174,29 +165,29 @@ def get_anchor_centered_layout(G):
                     
                     pos[node] = direction * layer_distance
     
-    pos = optimize_radial_layout(G, pos, anchor_nodes, layers, primary_parent)
+    pos = optimize_radial_layout(G, pos, center_nodes, layers, primary_parent)
     
     return pos
 
-def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations=50):
+def optimize_radial_layout(G, pos, center_nodes, layers, parents, max_iterations=50):
     # Convert to numpy arrays for easier manipulation
     nodes = list(pos.keys())
     positions = np.array([pos[node] for node in nodes])
     
-    # Keep anchors fixed at center
-    anchor_indices = [i for i, node in enumerate(nodes) if node in anchor_nodes]
+    # Keep center nodes fixed at center
+    center_indices = [i for i, node in enumerate(nodes) if node in center_nodes]
     
     for iteration in range(max_iterations):
         moved = False
         
-        # For each non-anchor node, try small adjustments that preserve radial structure
+        # For each non-center node, try small adjustments that preserve radial structure
         for i, node in enumerate(nodes):
-            if i in anchor_indices:
-                continue  # Don't move anchor nodes
+            if i in center_indices:
+                continue  # Don't move center nodes
             
             current_pos = positions[i].copy()
             best_pos = current_pos.copy()
-            best_score = calculate_radial_score(G, positions, nodes, i, parents, anchor_nodes)
+            best_score = calculate_radial_score(G, positions, nodes, i, parents, center_nodes)
             
             parent = parents.get(node)
             if parent and parent in nodes:
@@ -233,7 +224,7 @@ def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations
                 
                 # Temporarily update position
                 positions[i] = test_pos
-                score = calculate_radial_score(G, positions, nodes, i, parents, anchor_nodes)
+                score = calculate_radial_score(G, positions, nodes, i, parents, center_nodes)
                 
                 if score < best_score:
                     best_score = score
@@ -253,7 +244,7 @@ def optimize_radial_layout(G, pos, anchor_nodes, layers, parents, max_iterations
     
     return optimized_pos
 
-def calculate_radial_score(G, positions, nodes, node_idx, parents, anchor_nodes):
+def calculate_radial_score(G, positions, nodes, node_idx, parents, center_nodes):
     """
     Calculate a score for the radial layout (lower is better)
     Emphasizes maintaining radial structure while avoiding overlaps
@@ -340,7 +331,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                 label_parts.append(f"{key}: {value}")
             node_labels[n] = "\n".join(label_parts)
         
-        # Use anchor-centered layout
+        # Use modified layout that centers highest degree node
         pos = get_anchor_centered_layout(pattern)
         
         print("pos:", pos)
@@ -353,37 +344,53 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         edge_color_map = {edge_type: plt.cm.tab20(i % 20) for i, edge_type in enumerate(unique_edge_types)}
 
         base_node_size = 9000  # Large for small graphs
-        anchor_node_size = base_node_size * 1.2
+        center_node_size = base_node_size * 1.2
 
         colors = []
         node_sizes = []
         shapes = []
         node_list = list(pattern.nodes())
         
+        # Find highest degree node for special highlighting
+        degrees = dict(pattern.degree())
+        highest_degree_node = max(degrees, key=degrees.get)
+        
         for i, node in enumerate(node_list):
             node_data = pattern.nodes[node]
             node_label = node_data.get('label', 'unknown')
             is_anchor = node_data.get('anchor', 0) == 1 
+            is_center = node == highest_degree_node
             
-            if is_anchor:
+            if is_center:
+                colors.append('darkgreen')  # Different color for center node
+                node_sizes.append(center_node_size)
+                shapes.append('s')
+            elif is_anchor:
                 colors.append('red')
-                node_sizes.append(anchor_node_size)
+                node_sizes.append(base_node_size)
                 shapes.append('s')
             else:
                 colors.append(label_color_map[node_label])
                 node_sizes.append(base_node_size)
                 shapes.append('o')
         
-        # Separate anchor and regular nodes for drawing
+        # Separate center, anchor and regular nodes for drawing
+        center_nodes = []
         anchor_nodes = []
         regular_nodes = []
+        center_colors = []
         anchor_colors = []
         regular_colors = []
+        center_sizes = []
         anchor_sizes = []
         regular_sizes = []
         
         for i, node in enumerate(node_list):
-            if shapes[i] == 's':
+            if node == highest_degree_node:
+                center_nodes.append(node)
+                center_colors.append(colors[i])
+                center_sizes.append(node_sizes[i])
+            elif shapes[i] == 's' and node != highest_degree_node:
                 anchor_nodes.append(node)
                 anchor_colors.append(colors[i])
                 anchor_sizes.append(node_sizes[i])
@@ -412,6 +419,16 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     edgecolors='darkred', 
                     linewidths=3,
                     alpha=0.9)
+        
+        if center_nodes:
+            nx.draw_networkx_nodes(pattern, pos, 
+                    nodelist=center_nodes,
+                    node_color=center_colors, 
+                    node_size=center_sizes, 
+                    node_shape='s',
+                    edgecolors='darkgreen', 
+                    linewidths=4,
+                    alpha=1.0)
         
         # Adaptive edge styling
         if num_nodes > 30:
@@ -483,18 +500,37 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
+            is_center = node == highest_degree_node
             pad = 0.3 
-            bbox_props = dict(
-                facecolor='lightcoral' if is_anchor else 'lightblue',
-                edgecolor='darkred' if is_anchor else 'navy',
-                alpha=0.95 if is_anchor else 0.85,
-                boxstyle=f'round,pad={pad}',
-                linewidth=2 if is_anchor else 1
-            )
+            
+            if is_center:
+                bbox_props = dict(
+                    facecolor='lightgreen',
+                    edgecolor='darkgreen',
+                    alpha=0.95,
+                    boxstyle=f'round,pad={pad}',
+                    linewidth=3
+                )
+            elif is_anchor:
+                bbox_props = dict(
+                    facecolor='lightcoral',
+                    edgecolor='darkred',
+                    alpha=0.95,
+                    boxstyle=f'round,pad={pad}',
+                    linewidth=2
+                )
+            else:
+                bbox_props = dict(
+                    facecolor='lightblue',
+                    edgecolor='navy',
+                    alpha=0.85,
+                    boxstyle=f'round,pad={pad}',
+                    linewidth=1
+                )
             
             plt.text(x, y, label, 
                     fontsize=font_size, 
-                    fontweight='bold' if is_anchor else 'normal',
+                    fontweight='bold' if (is_anchor or is_center) else 'normal',
                     color='black',
                     ha='center', va='center',
                     bbox=bbox_props,
@@ -523,6 +559,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         # Create comprehensive title
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
         has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())
+        center_info = f" (Green square = highest degree node: {highest_degree_node})"
         anchor_info = " (Red squares = anchor nodes)" if has_anchors else ""
         total_node_attrs = sum(len([k for k in pattern.nodes[n].keys() 
                                   if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
@@ -536,13 +573,21 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         else:
             density_info += " (Sparse)"
         
-        title = f"{graph_type} Pattern Graph{anchor_info}\n"
+        title = f"{graph_type} Pattern Graph{center_info}{anchor_info}\n"
         title += f"({num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
         plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold')
         plt.axis('off')
         
         # Create legends
         legend_elements = []
+        
+        # Add center node legend entry
+        legend_elements.append(
+            plt.Line2D([0], [0], marker='s', color='w', 
+                      markerfacecolor='darkgreen', markersize=12, 
+                      label=f'Center Node (Highest Degree: {degrees[highest_degree_node]})', 
+                      markeredgecolor='darkgreen', linewidth=3)
+        )
         
         if len(unique_labels) > 1:
             for label, color in label_color_map.items():
@@ -605,6 +650,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             pattern_info.append('edges-' + '-'.join(edge_types))
         if has_anchors:
             pattern_info.append('anchored')
+        pattern_info.append('centered-highest-degree')  # New indicator
         if total_node_attrs > 0:
             pattern_info.append(f'{total_node_attrs}attrs')
         if edge_density > 0.5:
@@ -627,6 +673,5 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         
     except Exception as e:
         print(f"Error visualizing pattern with {len(pattern)} nodes: {e}")
-        import traceback
         traceback.print_exc()
         return False
