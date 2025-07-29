@@ -25,7 +25,7 @@ from common import data
 from common import models
 from common import utils
 from common import combined_syn
-from subgraph_mining.centered_degree_viz import visualize_pattern_graph_ext
+from subgraph_mining.viz import visualize_pattern_graph_ext
 from subgraph_mining.config import parse_decoder
 from subgraph_matching.config import parse_encoder
 from subgraph_mining.search_agents import GreedySearchAgent, MCTSSearchAgent, MemoryEfficientMCTSAgent, MemoryEfficientGreedyAgent, BeamSearchAgent
