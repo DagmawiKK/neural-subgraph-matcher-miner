@@ -333,7 +333,8 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             node_labels[n] = "\n".join(label_parts)
         
         # Use modified layout that centers highest degree node
-        pos = get_anchor_centered_layout(pattern)
+        pos_init = get_anchor_centered_layout(pattern)
+        pos = nx.spring_layout(pattern, k=1.5, iterations=100, seed=42, pos=pos_init)
         
         print("pos:", pos)
         print("num_nodes:", num_nodes, "num_edges:", num_edges, "edge_density:", edge_density)
