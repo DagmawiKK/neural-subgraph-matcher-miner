@@ -476,18 +476,9 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             label = node_labels[node]
             node_data = pattern.nodes[node]
             is_anchor = node_data.get('anchor', 0) == 1
-            is_center = node == highest_degree_node
             pad = 0.3 
-            
-            if is_center:
-                bbox_props = dict(
-                    facecolor='lightgreen',
-                    edgecolor='darkgreen',
-                    alpha=0.95,
-                    boxstyle=f'round,pad={pad}',
-                    linewidth=3
-                )
-            elif is_anchor:
+        
+            if is_anchor:
                 bbox_props = dict(
                     facecolor='lightcoral',
                     edgecolor='darkred',
@@ -535,7 +526,6 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         # Create comprehensive title
         graph_type = "Directed" if pattern.is_directed() else "Undirected"
         has_anchors = any(pattern.nodes[n].get('anchor', 0) == 1 for n in pattern.nodes())
-        center_info = f" (Green square = highest degree node: {highest_degree_node})"
         anchor_info = " (Red squares = anchor nodes)" if has_anchors else ""
         total_node_attrs = sum(len([k for k in pattern.nodes[n].keys() 
                                   if k not in ['id', 'label', 'anchor'] and pattern.nodes[n][k] is not None]) 
@@ -556,14 +546,6 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         
         # Create legends
         legend_elements = []
-        
-        # Add center node legend entry
-        legend_elements.append(
-            plt.Line2D([0], [0], marker='s', color='w', 
-                      markerfacecolor='darkgreen', markersize=12, 
-                      label=f'Center Node (Highest Degree: {degrees[highest_degree_node]})', 
-                      markeredgecolor='darkgreen', linewidth=3)
-        )
         
         if len(unique_labels) > 1:
             for label, color in label_color_map.items():
