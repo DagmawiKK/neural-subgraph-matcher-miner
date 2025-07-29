@@ -326,9 +326,10 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             node_data = pattern.nodes[n]
             label_parts = []
             for key, value in node_data.items():
-                if isinstance(value, float):
-                    value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
-                label_parts.append(f"{key}: {value}")
+                if key != "anchor":
+                    if isinstance(value, float):
+                        value = f"{value:.1f}" if abs(value) < 100 else f"{value:.0e}"
+                    label_parts.append(f"{key}: {value}")
             node_labels[n] = "\n".join(label_parts)
         
         # Use modified layout that centers highest degree node
