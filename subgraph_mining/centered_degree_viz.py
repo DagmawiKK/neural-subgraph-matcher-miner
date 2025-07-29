@@ -65,11 +65,11 @@ def get_anchor_centered_layout(G):
     # Position Layer 1 in a perfect circle around center node
     num_nodes = len(G)
     if num_nodes <= 8:
-        base_radius = 6.0    # Increased for small graphs
-        radius_increment = 5.5
+        base_radius = 8.0    # Increased for small graphs
+        radius_increment = 7.0
     else:
-        base_radius = 3.0
-        radius_increment = 3.5
+        base_radius = 4.0
+        radius_increment = 4.0
     if 1 in layers:
         layer_1_nodes = layers[1]
         num_layer1 = len(layer_1_nodes)
@@ -334,7 +334,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         
         # Use modified layout that centers highest degree node
         pos_init = get_anchor_centered_layout(pattern)
-        pos = nx.spring_layout(pattern, k=1.5, iterations=100, seed=42, pos=pos_init)
+        pos = nx.spring_layout(pattern, k=2.5, iterations=50, seed=42, pos=pos_init)
         
         print("pos:", pos)
         print("num_nodes:", num_nodes, "num_edges:", num_edges, "edge_density:", edge_density)
