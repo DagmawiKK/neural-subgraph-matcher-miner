@@ -497,7 +497,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
             
             plt.text(x, y, label, 
                     fontsize=font_size, 
-                    fontweight='bold' if (is_anchor or is_center) else 'normal',
+                    fontweight='normal',
                     color='black',
                     ha='center', va='center',
                     bbox=bbox_props,
@@ -539,7 +539,7 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         else:
             density_info += " (Sparse)"
         
-        title = f"{graph_type} Pattern Graph{center_info}{anchor_info}\n"
+        title = f"{graph_type} Pattern Graph{anchor_info}\n"
         title += f"({num_nodes} nodes, {num_edges} edges{attr_info}, {density_info})"
         plt.title(title, fontsize=max(12, min(16, 20 - num_nodes//10)), fontweight='bold')
         plt.axis('off')
