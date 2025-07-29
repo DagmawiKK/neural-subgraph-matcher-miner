@@ -351,21 +351,12 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         shapes = []
         node_list = list(pattern.nodes())
         
-        # Find highest degree node for special highlighting
-        degrees = dict(pattern.degree())
-        highest_degree_node = max(degrees, key=degrees.get)
-        
         for i, node in enumerate(node_list):
             node_data = pattern.nodes[node]
             node_label = node_data.get('label', 'unknown')
             is_anchor = node_data.get('anchor', 0) == 1 
-            is_center = node == highest_degree_node
-            
-            if is_center:
-                colors.append('darkgreen')  # Different color for center node
-                node_sizes.append(center_node_size)
-                shapes.append('s')
-            elif is_anchor:
+
+            if is_anchor:
                 colors.append('red')
                 node_sizes.append(base_node_size)
                 shapes.append('s')
@@ -375,22 +366,15 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                 shapes.append('o')
         
         # Separate center, anchor and regular nodes for drawing
-        center_nodes = []
         anchor_nodes = []
         regular_nodes = []
-        center_colors = []
         anchor_colors = []
         regular_colors = []
-        center_sizes = []
         anchor_sizes = []
         regular_sizes = []
         
         for i, node in enumerate(node_list):
-            if node == highest_degree_node:
-                center_nodes.append(node)
-                center_colors.append(colors[i])
-                center_sizes.append(node_sizes[i])
-            elif shapes[i] == 's' and node != highest_degree_node:
+            if shapes[i] == 's':
                 anchor_nodes.append(node)
                 anchor_colors.append(colors[i])
                 anchor_sizes.append(node_sizes[i])
@@ -419,16 +403,6 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
                     edgecolors='darkred', 
                     linewidths=3,
                     alpha=0.9)
-        
-        if center_nodes:
-            nx.draw_networkx_nodes(pattern, pos, 
-                    nodelist=center_nodes,
-                    node_color=center_colors, 
-                    node_size=center_sizes, 
-                    node_shape='s',
-                    edgecolors='darkgreen', 
-                    linewidths=4,
-                    alpha=1.0)
         
         # Adaptive edge styling
         if num_nodes > 30:
