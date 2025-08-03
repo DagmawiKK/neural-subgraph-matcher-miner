@@ -2184,12 +2184,14 @@
                         const labelY = node.y;
 
                         // Calculate node radius for proper positioning
-                        const nodeRadius = node.anchor ? 35 : 40;
+                        let nodeRadius = node.anchor ? 35 : 40;
 
-                        // Ensure label background doesn't completely cover the node
-                        // Keep top and bottom edges of node visible (requirement 6.7)
-                        const maxBgHeight = Math.min(bgHeight, (nodeRadius * 2 * 0.6) / this.transform.scale);
-                        const adjustedBgHeight = Math.min(bgHeight, maxBgHeight);
+                        // If label is taller than node, increase node radius to fit label
+                        const minNodeRadius = (bgHeight / 2) + 4; // 4px padding
+                        if (nodeRadius < minNodeRadius) {
+                            nodeRadius = minNodeRadius;
+                        }
+                        const adjustedBgHeight = bgHeight;
 
                         // Draw transparent rectangular background centered on node
                         ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
