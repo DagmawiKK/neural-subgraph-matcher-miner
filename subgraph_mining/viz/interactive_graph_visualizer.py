@@ -521,6 +521,7 @@ class HTMLTemplateProcessor:
         try:
             # Convert graph data to JSON with proper formatting
             json_data = json.dumps(graph_data, indent=8, ensure_ascii=False)
+            json_data = json_data.replace('\n', '\\n')
             
             # Find the GRAPH_DATA placeholder and replace it
             # Look for the pattern: const GRAPH_DATA = { ... };
