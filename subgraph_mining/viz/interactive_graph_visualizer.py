@@ -135,16 +135,22 @@ class GraphDataExtractor:
             x, y = pos.get(node_key, (0, 0))
             is_anchor = node_data.get('anchor', 0) == 1
 
-            # Build node dict dynamically, but ensure id, label, x, y, anchor are present and correct
+            # Build display label from all attributes except anchor, x, y, id, label
+            display_label_parts = []
+            for key, value in node_data.items():
+                if key not in {'anchor', 'x', 'y'} and value is not None:
+                    display_label_parts.append(f"{key}: {value}")
+            display_label = "\n".join(display_label_parts) if display_label_parts else node_id
+
             node_dict = dict(node_data)
             node_dict['id'] = node_id
             node_dict['x'] = float(x)
             node_dict['y'] = float(y)
             node_dict['anchor'] = is_anchor
-
             # Ensure 'label' is the type/category (not a display label)
             if 'label' not in node_dict or node_dict['label'] is None:
                 node_dict['label'] = self._get_node_type(node_data)
+            node_dict['display_label'] = display_label  # <-- Add this line
 
             nodes.append(node_dict)
         return nodes
@@ -291,41 +297,28 @@ class GraphDataExtractor:
         
         return metadata
     
-    def _generate_legend(self, nodes: List[Dict[str, Any]], 
-                        edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Generate legend data based on discovered node and edge labels.
-        """
-        # Discover unique node labels
-        node_types = set()
-        for node in nodes:
-            node_types.add(node['label'])
-        
-        # Discover unique edge labels
-        edge_types = set()
-        for edge in edges:
-            edge_types.add(edge['label'])
-        
-        # Generate node type legend entries
+    def _generate_legend(self, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        node_types = set(node['label'] for node in nodes)
+        edge_types = set(edge['label'] for edge in edges)
+
         node_legend = []
         for i, node_type in enumerate(sorted(node_types)):
             color = self.color_palette[i % len(self.color_palette)]
             node_legend.append({
-                'type': node_type,
+                'label': node_type,
                 'color': color,
-                'description': f'{node_type.title()} nodes'
+                'description': f"{node_type.title()} nodes"
             })
-        
-        # Generate edge type legend entries
+
         edge_legend = []
         for i, edge_type in enumerate(sorted(edge_types)):
             color = self.edge_color_palette[i % len(self.edge_color_palette)]
             edge_legend.append({
-                'type': edge_type,
+                'label': edge_type,
                 'color': color,
-                'description': f'{edge_type.title()} edges'
+                'description': f"{edge_type.replace('_', ' ').title()} edges"
             })
-        
+
         return {
             'nodeTypes': node_legend,
             'edgeTypes': edge_legend

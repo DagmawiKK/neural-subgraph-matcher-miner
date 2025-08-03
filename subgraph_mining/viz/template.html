@@ -1491,7 +1491,7 @@
             
             copyNodeLabel(node) {
                 // Copy only the label (or id) of the specific node
-                const label = node.label || node.id;
+                const label = node.display_label || node.label;
 
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     navigator.clipboard.writeText(label).then(() => {
