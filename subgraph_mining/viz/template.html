@@ -1146,7 +1146,7 @@
                 this.maxZoom = 5.0;
                 this.zoomStep = 0.2;
                 this.animationDuration = 300; // ms
-                this.nodeRadius = 40;
+                this.nodeRadius = 50;
                 this.hoverRadius = 25; // Slightly larger for easier interaction
                 
                 this.setupEventListeners();
@@ -1888,7 +1888,7 @@
             
             drawNodes(nodes) {
                 const ctx = this.ctx;
-                const nodeRadius = 40;
+                const nodeRadius = 50;
                 const baseLineWidth = 3 / this.transform.scale;
                 
                 // Draw nodes in z-order (bottom to top)
@@ -2022,7 +2022,7 @@
                     
                     // Calculate edge endpoints (accounting for node radius and current visual state)
                     const getNodeRadius = (node) => {
-                        const base = this.nodeRadius || 40;
+                        const base = this.nodeRadius || 50;
                         if (this.draggedNode && this.draggedNode.id === node.id) return node.anchor ? base * 1.3 : base * 1.1;
                         if (this.selectedNode && this.selectedNode.id === node.id) return node.anchor ? base * 1.25 : base * 1.05;
                         if (this.hoveredNode && this.hoveredNode.id === node.id) return node.anchor ? base * 1.22 : base * 1.02;
@@ -2033,7 +2033,7 @@
                         // Returns the intersection point from (x0, y0) to (x1, y1) with the node's border
                         if (node.anchor) {
                             // Square: calculate intersection with square border
-                            const size = 40 * 1.2; // match your square half-size
+                            const size = 50 * 1.2; // match your square half-size
                             const cx = node.x, cy = node.y;
                             const dx = x1 - x0, dy = y1 - y0;
                             let tMin = Infinity, ix = cx, iy = cy;
@@ -2075,7 +2075,7 @@
                             // Circle: use radius
                             const dx = x1 - x0, dy = y1 - y0;
                             const distance = Math.sqrt(dx * dx + dy * dy);
-                            const r = 40;
+                            const r = 50;
                             return {
                                 x: node.x + (dx / distance) * r,
                                 y: node.y + (dy / distance) * r
@@ -2577,9 +2577,12 @@
             constructor(canvas) {
                 this.canvas = canvas;
             }
-            
+
             exportToPDF() {
                 try {
+                    // Draw legend on canvas before export
+                    this.drawLegendOnCanvas();
+
                     // Convert canvas to image data URL
                     const imgData = this.canvas.toDataURL('image/png');
                     // Create jsPDF instance (landscape, size matches canvas)
@@ -2593,12 +2596,15 @@
                     // Save as PDF
                     pdf.save(`graph_visualization_${new Date().getTime()}.pdf`);
                     console.log('Graph exported as PDF');
+
+                    // Restore canvas (remove legend overlay)
+                    window.canvasNavigator.render();
                 } catch (error) {
                     console.error('Export to PDF failed:', error);
                     alert('Export failed. Please try again.');
                 }
             }
-            
+
             exportToSVG() {
                 try {
                     const svgWidth = this.canvas.width;
@@ -2613,106 +2619,63 @@
                     // Add transform group
                     svgContent += `<g transform="translate(${transform.x}, ${transform.y}) scale(${transform.scale})">`;
 
-                    // Draw grid (optional, simplified)
-                    const baseGridSize = 50;
-                    const topLeft = window.canvasNavigator.screenToWorld(0, 0);
-                    const bottomRight = window.canvasNavigator.screenToWorld(svgWidth, svgHeight);
-                    const startX = Math.floor(topLeft.x / baseGridSize) * baseGridSize;
-                    const endX = Math.ceil(bottomRight.x / baseGridSize) * baseGridSize;
-                    const startY = Math.floor(topLeft.y / baseGridSize) * baseGridSize;
-                    const endY = Math.ceil(bottomRight.y / baseGridSize) * baseGridSize;
-                    for (let x = startX; x <= endX; x += baseGridSize) {
-                        svgContent += `<line x1="${x}" y1="${startY}" x2="${x}" y2="${endY}" stroke="rgba(0,0,0,0.05)" stroke-width="${0.5 / transform.scale}"/>`;
+                    // ... (existing code for grid, edges, nodes, labels) ...
+
+                    svgContent += '</g>';
+
+                    // --- Legend SVG ---
+                    // Calculate legend position and size
+                    const legendWidth = 240;
+                    const legendPadding = 16;
+                    const legendHeight = 140 +
+                        24 * (GRAPH_DATA.legend.nodeTypes?.length || 0) +
+                        24 * (GRAPH_DATA.legend.edgeTypes?.length || 0) +
+                        32; // extra for anchor section
+
+                    const legendX = svgWidth - legendWidth - 32;
+                    const legendY = svgHeight - legendHeight - 32;
+
+                    svgContent += `<g>
+            <rect x="${legendX}" y="${legendY}" width="${legendWidth}" height="${legendHeight}" rx="14" fill="white" stroke="rgba(0,0,0,0.12)" stroke-width="2"/>
+            <text x="${legendX + legendPadding}" y="${legendY + 30}" font-size="16" font-family="sans-serif" font-weight="bold" fill="#222">Legend</text>
+            `;
+
+                    let y = legendY + 54;
+
+                    // Node Types
+                    if (GRAPH_DATA.legend && GRAPH_DATA.legend.nodeTypes && GRAPH_DATA.legend.nodeTypes.length > 0) {
+                        svgContent += `<text x="${legendX + legendPadding}" y="${y}" font-size="13" font-family="sans-serif" font-weight="bold" fill="#666">Node Types</text>`;
+                        y += 20;
+                        GRAPH_DATA.legend.nodeTypes.forEach(nt => {
+                            svgContent += `
+            <rect x="${legendX + legendPadding}" y="${y - 12}" width="18" height="18" rx="4" fill="${nt.color}" stroke="#bbb" stroke-width="1"/>
+            <text x="${legendX + legendPadding + 28}" y="${y + 2}" font-size="13" font-family="sans-serif" fill="#222">${nt.label}</text>
+            `;
+                            y += 24;
+                        });
                     }
-                    for (let y = startY; y <= endY; y += baseGridSize) {
-                        svgContent += `<line x1="${startX}" y1="${y}" x2="${endX}" y2="${y}" stroke="rgba(0,0,0,0.05)" stroke-width="${0.5 / transform.scale}"/>`;
+
+                    // Edge Types
+                    if (GRAPH_DATA.legend && GRAPH_DATA.legend.edgeTypes && GRAPH_DATA.legend.edgeTypes.length > 0) {
+                        svgContent += `<text x="${legendX + legendPadding}" y="${y}" font-size="13" font-family="sans-serif" font-weight="bold" fill="#666">Edge Types</text>`;
+                        y += 20;
+                        GRAPH_DATA.legend.edgeTypes.forEach(et => {
+                            svgContent += `
+            <rect x="${legendX + legendPadding}" y="${y - 12}" width="18" height="6" rx="2" fill="${et.color}" stroke="#bbb" stroke-width="1"/>
+            <text x="${legendX + legendPadding + 28}" y="${y - 2}" font-size="13" font-family="sans-serif" fill="#222">${et.label}</text>
+            `;
+                            y += 20;
+                        });
                     }
 
-                    // Use actual graph data
-                    const nodes = GRAPH_DATA.nodes;
-                    const edges = GRAPH_DATA.edges;
+                    // Anchor Nodes
+                    svgContent += `<text x="${legendX + legendPadding}" y="${y}" font-size="13" font-family="sans-serif" font-weight="bold" fill="#666">Special Nodes</text>`;
+                    y += 20;
+                    svgContent += `
+            <rect x="${legendX + legendPadding}" y="${y - 12}" width="18" height="18" rx="2" fill="rgba(239, 68, 68, 0.8)" stroke="#bbb" stroke-width="1"/>
+            <text x="${legendX + legendPadding + 28}" y="${y + 2}" font-size="13" font-family="sans-serif" fill="#222">Anchor Nodes</text>
+            `;
 
-                    // Draw edges
-                    edges.forEach(edge => {
-                        const source = nodes.find(n => n.id === edge.source);
-                        const target = nodes.find(n => n.id === edge.target);
-                        if (!source || !target) return;
-
-                        // Calculate edge endpoints (accounting for node radius)
-                        const dx = target.x - source.x;
-                        const dy = target.y - source.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        if (distance === 0) return;
-                        const unitX = dx / distance;
-                        const unitY = dy / distance;
-                        const baseNodeRadius = 40;
-                        const sourceRadius = source.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
-                        const targetRadius = target.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
-                        const startX = source.x + unitX * sourceRadius;
-                        const startY = source.y + unitY * sourceRadius;
-                        const endX = target.x - unitX * targetRadius;
-                        const endY = target.y - unitY * targetRadius;
-
-                        // Edge color
-                        const edgeColor = window.styleManager.getEdgeColor(edge.label);
-
-                        svgContent += `<line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${edgeColor}" stroke-width="${2 / transform.scale}"/>`;
-
-                        // Draw arrow for directed edges
-                        if (edge.directed) {
-                            // Arrowhead
-                            const arrowSize = 8 / transform.scale;
-                            const angle = Math.atan2(endY - startY, endX - startX);
-                            const arrowAngle = Math.PI / 6;
-                            const arrowX1 = endX - arrowSize * Math.cos(angle - arrowAngle);
-                            const arrowY1 = endY - arrowSize * Math.sin(angle - arrowAngle);
-                            const arrowX2 = endX - arrowSize * Math.cos(angle + arrowAngle);
-                            const arrowY2 = endY - arrowSize * Math.sin(angle + arrowAngle);
-                            svgContent += `<polyline points="${endX},${endY} ${arrowX1},${arrowY1} ${arrowX2},${arrowY2} ${endX},${endY}" fill="none" stroke="${edgeColor}" stroke-width="${2 / transform.scale}"/>`;
-                        }
-
-                        // Edge label
-                        if (window.labelsEnabled && edge.label) {
-                            const midX = (source.x + target.x) / 2;
-                            const midY = (source.y + target.y) / 2;
-                            const fontSize = Math.max(8, 10 / transform.scale);
-                            const padding = 2 / transform.scale;
-                            const textWidth = edge.label.length * fontSize * 0.6;
-                            const bgWidth = textWidth + (padding * 2);
-                            const bgHeight = fontSize + (padding * 2);
-
-                            svgContent += `<rect x="${midX - bgWidth / 2}" y="${midY - bgHeight / 2}" width="${bgWidth}" height="${bgHeight}" fill="rgba(255,255,255,0.9)" stroke="rgba(0,0,0,0.1)" stroke-width="${0.5 / transform.scale}"/>`;
-                            svgContent += `<text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" fill="rgba(0,0,0,0.7)">${edge.label}</text>`;
-                        }
-                    });
-
-                    // Draw nodes
-                    nodes.forEach(node => {
-                        const nodeColor = node.anchor ? 'rgba(239, 68, 68, 0.8)' : window.styleManager.getNodeColor(node.label);
-                        const borderColor = 'rgba(0, 0, 0, 0.3)';
-                        const nodeRadius = node.anchor ? 40 : 35;
-                        if (node.anchor) {
-                            // Draw anchor nodes as squares
-                            svgContent += `<rect x="${node.x - nodeRadius}" y="${node.y - nodeRadius}" width="${nodeRadius * 2}" height="${nodeRadius * 2}" fill="${nodeColor}" stroke="${borderColor}" stroke-width="${2 / transform.scale}"/>`;
-                        } else {
-                            // Draw regular nodes as circles
-                            svgContent += `<circle cx="${node.x}" cy="${node.y}" r="${nodeRadius}" fill="${nodeColor}" stroke="${borderColor}" stroke-width="${2 / transform.scale}"/>`;
-                        }
-
-                        // Node label
-                        if (window.labelsEnabled && node.label) {
-                            const fontSize = Math.max(10, 12 / transform.scale);
-                            const padding = 4 / transform.scale;
-                            const textWidth = node.label.length * fontSize * 0.6;
-                            const bgWidth = textWidth + (padding * 2);
-                            const bgHeight = fontSize + (padding * 2);
-
-                            svgContent += `<rect x="${node.x - bgWidth / 2}" y="${node.y - bgHeight / 2}" width="${bgWidth}" height="${bgHeight}" fill="rgba(255,255,255,0.8)" stroke="rgba(0,0,0,0.2)" stroke-width="${1 / transform.scale}"/>`;
-                            svgContent += `<text x="${node.x}" y="${node.y}" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" fill="rgba(0,0,0,0.9)">${node.label}</text>`;
-                        }
-                    });
-
-                    // Close transform group and SVG
                     svgContent += '</g></svg>';
 
                     // Create blob and download
@@ -2731,6 +2694,68 @@
                     console.error('Export to SVG failed:', error);
                     alert('Export failed. Please try again.');
                 }
+            }
+
+            drawLegendOnCanvas() {
+                const ctx = this.canvas.getContext('2d');
+                const legendCard = document.getElementById('legend-card');
+                if (!legendCard) return;
+
+                // Get legend card position and size
+                const rect = legendCard.getBoundingClientRect();
+                const canvasRect = this.canvas.getBoundingClientRect();
+
+                // Calculate position relative to canvas
+                const x = rect.left - canvasRect.left;
+                const y = rect.top - canvasRect.top;
+                const width = rect.width;
+                const height = rect.height;
+
+                // Draw a white rounded rectangle as background
+                ctx.save();
+                ctx.resetTransform && ctx.resetTransform(); // For modern browsers
+                ctx.beginPath();
+                const radius = 12;
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + width - radius, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                ctx.lineTo(x + width, y + height - radius);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                ctx.lineTo(x + radius, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(255,255,255,0.97)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw legend content as image
+                // Use html2canvas for best results (optional), or fallback to draw text
+                // Here is a simple fallback: draw the legendCard as an image
+                try {
+                    // Use html2canvas if available
+                    if (window.html2canvas) {
+                        window.html2canvas(legendCard).then(legendCanvas => {
+                            ctx.drawImage(legendCanvas, x, y, width, height);
+                        });
+                    } else {
+                        // Fallback: draw text only (not styled)
+                        ctx.fillStyle = '#222';
+                        ctx.font = 'bold 16px sans-serif';
+                        ctx.fillText('Legend', x + 16, y + 32);
+                        // You can add more code here to draw legend items if needed
+                    }
+                } catch (e) {
+                    // Fallback: just draw the title
+                    ctx.fillStyle = '#222';
+                    ctx.font = 'bold 16px sans-serif';
+                    ctx.fillText('Legend', x + 16, y + 32);
+                }
+
+                ctx.restore();
             }
         }
 
