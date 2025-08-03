@@ -213,19 +213,19 @@ class GraphDataExtractor:
         # Discover unique node types
         node_types = set()
         for node in nodes:
-            node_types.add(node['type'])
+            node_types.add(node['label'])
         
         # Discover unique edge types
         edge_types = set()
         for edge in edges:
-            edge_types.add(edge['type'])
+            edge_types.add(edge['label'])
         
         # Generate node type legend entries
         node_legend = []
         for i, node_type in enumerate(sorted(node_types)):
             color = self.color_palette[i % len(self.color_palette)]
             node_legend.append({
-                'type': node_type,
+                'label': node_type,
                 'color': color,
                 'description': f'{node_type.title()} nodes'
             })
@@ -235,7 +235,7 @@ class GraphDataExtractor:
         for i, edge_type in enumerate(sorted(edge_types)):
             color = self.edge_color_palette[i % len(self.edge_color_palette)]
             edge_legend.append({
-                'type': edge_type,
+                'label': edge_type,
                 'color': color,
                 'description': f'{edge_type.title()} edges'
             })
@@ -277,7 +277,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
             return False
         
         # Validate first node structure
-        node_keys = ['id', 'x', 'y', 'type', 'label', 'anchor']
+        node_keys = ['id', 'x', 'y', 'label', 'anchor']
         if not all(key in nodes[0] for key in node_keys):
             return False
         
@@ -288,7 +288,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
         
         # If edges exist, validate structure
         if len(edges) > 0:
-            edge_keys = ['source', 'target', 'type', 'directed', 'label']
+            edge_keys = ['source', 'target', 'directed', 'label']
             if not all(key in edges[0] for key in edge_keys):
                 return False
         
@@ -738,9 +738,9 @@ def _generate_pattern_filename(pattern: nx.Graph, count_by_size: Dict[int, int])
         
         # Edge types
         edge_types = sorted(set(
-            data.get('type', '') 
+            data.get('label', '') 
             for u, v, data in pattern.edges(data=True) 
-            if data.get('type', '')
+            if data.get('label', '')
         ))
         if edge_types:
             components.append('edges-' + '-'.join(edge_types))
