@@ -2265,15 +2265,15 @@
                         let displayLabel = node.display_label || node.label;
                         let textMetrics = ctx.measureText(displayLabel);
                         
-                        // Truncate label if it's too long and add ellipsis
-                        if (textMetrics.width > maxLabelWidth) {
-                            let truncatedLabel = displayLabel;
-                            while (truncatedLabel.length > 0 && ctx.measureText(truncatedLabel + '...').width > maxLabelWidth) {
-                                truncatedLabel = truncatedLabel.slice(0, -1);
-                            }
-                            displayLabel = truncatedLabel + '...';
-                            textMetrics = ctx.measureText(displayLabel);
-                        }
+                        // // Truncate label if it's too long and add ellipsis
+                        // if (textMetrics.width > maxLabelWidth) {
+                        //     let truncatedLabel = displayLabel;
+                        //     while (truncatedLabel.length > 0 && ctx.measureText(truncatedLabel + '...').width > maxLabelWidth) {
+                        //         truncatedLabel = truncatedLabel.slice(0, -1);
+                        //     }
+                        //     displayLabel = truncatedLabel + '...';
+                        //     textMetrics = ctx.measureText(displayLabel);
+                        // }
                         
                         const textWidth = textMetrics.width;
                         const textHeight = fontSize;
@@ -2313,7 +2313,7 @@
                         
                         // Draw text centered on node
                         ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
-                        const lines = displayLabel.split('\\n');
+                        const lines = displayLabel.split('\n');
                         lines.forEach((line, i) => {
                             ctx.fillText(line, labelX, labelY + (i - (lines.length-1)/2) * textHeight);
                         });
