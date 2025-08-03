@@ -773,21 +773,26 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         logger.info("Generating HTML visualization...")
         try:
             import os
+            # Ensure output directory exists
+            output_dir = os.path.join(os.path.dirname(__file__), "../../plots/cluster")
+            output_dir = os.path.abspath(output_dir)
+            os.makedirs(output_dir, exist_ok=True)
+
             template_path = os.path.join(os.path.dirname(__file__), "template.html")
             processor = HTMLTemplateProcessor(template_path)
             
             # Generate filename based on graph characteristics and count_by_size
             base_filename = _generate_pattern_filename(pattern, count_by_size)
             
-            # Process template and create HTML file
+            # Process template and create HTML file in plots/cluster
             output_path = processor.process_template(
                 graph_data=graph_data,
                 output_filename=base_filename,
-                output_dir="."
+                output_dir=output_dir
             )
             
             logger.info(f"HTML visualization created successfully: {output_path}")
-            
+
         except FileNotFoundError as e:
             logger.error(f"Template file not found: {str(e)}")
             logger.info("Make sure template.html exists in the current directory")
