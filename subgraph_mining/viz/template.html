@@ -2238,20 +2238,19 @@
                 ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                
+
                 nodes.forEach(node => {
                     if (node.label) {
                         // Apply isolation effects
                         const isIsolated = this.isolatedNode !== null;
                         const isIsolatedNode = this.isolatedNode && this.isolatedNode.id === node.id;
                         const isConnectedToIsolated = isIsolated && !isIsolatedNode && this.isNodeConnectedToIsolated(node);
-                        
-                        let bgOpacity = 0.7;  // Reduced for better node color visibility
+
+                        let bgOpacity = 0.7;
                         let textOpacity = 0.95;
                         let borderOpacity = 0.15;
-                        
+
                         if (isIsolated && !isIsolatedNode && !isConnectedToIsolated) {
-                            // Apply blur and opacity reduction to non-connected labels
                             ctx.filter = 'blur(1px)';
                             bgOpacity = 0.3;
                             textOpacity = 0.3;
@@ -2259,47 +2258,40 @@
                         } else {
                             ctx.filter = 'none';
                         }
-                        
-                        // Handle horizontal overflow for long labels
-                        const maxLabelWidth = 120 / this.transform.scale; // Maximum label width in world coordinates
+
+                        // Multi-line label support
                         let displayLabel = node.display_label || node.label;
-                        let textMetrics = ctx.measureText(displayLabel);
-                        
-                        // // Truncate label if it's too long and add ellipsis
-                        // if (textMetrics.width > maxLabelWidth) {
-                        //     let truncatedLabel = displayLabel;
-                        //     while (truncatedLabel.length > 0 && ctx.measureText(truncatedLabel + '...').width > maxLabelWidth) {
-                        //         truncatedLabel = truncatedLabel.slice(0, -1);
-                        //     }
-                        //     displayLabel = truncatedLabel + '...';
-                        //     textMetrics = ctx.measureText(displayLabel);
-                        // }
-                        
-                        const textWidth = textMetrics.width;
+                        const lines = displayLabel.split('\\n'); // Use '\\n' if your Python outputs double-backslash
+
+                        // Calculate width and height for all lines
+                        let maxLineWidth = 0;
+                        lines.forEach(line => {
+                            const metrics = ctx.measureText(line);
+                            if (metrics.width > maxLineWidth) maxLineWidth = metrics.width;
+                        });
                         const textHeight = fontSize;
-                        
-                        // Calculate label background dimensions with padding
+                        const textWidth = maxLineWidth;
                         const padding = 3 / this.transform.scale;
                         const bgWidth = textWidth + (padding * 2);
-                        const bgHeight = textHeight + (padding * 1.5);
-                        
-                        // Position label centered on node (requirement 6.6)
+                        const bgHeight = lines.length * textHeight + (padding * 2);
+
+                        // Position label centered on node
                         const labelX = node.x;
                         const labelY = node.y;
-                        
+
                         // Calculate node radius for proper positioning
                         const nodeRadius = node.anchor ? 30 : 35;
-                        
+
                         // Ensure label background doesn't completely cover the node
                         // Keep top and bottom edges of node visible (requirement 6.7)
                         const maxBgHeight = Math.min(bgHeight, (nodeRadius * 2 * 0.6) / this.transform.scale);
                         const adjustedBgHeight = Math.min(bgHeight, maxBgHeight);
-                        
+
                         // Draw transparent rectangular background centered on node
                         ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
                         ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
                         ctx.lineWidth = 0.5 / this.transform.scale;
-                        
+
                         // Draw rounded rectangle for better aesthetics
                         const cornerRadius = 2 / this.transform.scale;
                         this.drawRoundedRect(
@@ -2310,14 +2302,15 @@
                             adjustedBgHeight,
                             cornerRadius
                         );
-                        
-                        // Draw text centered on node
+
+                        // Draw text centered on node, each line stacked vertically
                         ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
-                        const lines = displayLabel.split('\n');
+                        const totalTextHeight = lines.length * textHeight;
+                        const startY = labelY - totalTextHeight / 2 + textHeight / 2;
                         lines.forEach((line, i) => {
-                            ctx.fillText(line, labelX, labelY + (i - (lines.length-1)/2) * textHeight);
+                            ctx.fillText(line, labelX, startY + i * textHeight);
                         });
-                        
+
                         // Reset filter effects
                         ctx.filter = 'none';
                     }
