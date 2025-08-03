@@ -1146,7 +1146,7 @@
                 this.maxZoom = 5.0;
                 this.zoomStep = 0.2;
                 this.animationDuration = 300; // ms
-                this.nodeRadius = 35;
+                this.nodeRadius = 40;
                 this.hoverRadius = 25; // Slightly larger for easier interaction
                 
                 this.setupEventListeners();
@@ -1883,7 +1883,7 @@
             
             drawNodes(nodes) {
                 const ctx = this.ctx;
-                const nodeRadius = 35;
+                const nodeRadius = 40;
                 const baseLineWidth = 3 / this.transform.scale;
                 
                 // Draw nodes in z-order (bottom to top)
@@ -2017,7 +2017,7 @@
                     
                     // Calculate edge endpoints (accounting for node radius and current visual state)
                     const getNodeRadius = (node) => {
-                        const base = this.nodeRadius || 35;
+                        const base = this.nodeRadius || 40;
                         if (this.draggedNode && this.draggedNode.id === node.id) return node.anchor ? base * 1.3 : base * 1.1;
                         if (this.selectedNode && this.selectedNode.id === node.id) return node.anchor ? base * 1.25 : base * 1.05;
                         if (this.hoveredNode && this.hoveredNode.id === node.id) return node.anchor ? base * 1.22 : base * 1.02;
@@ -2028,7 +2028,7 @@
                         // Returns the intersection point from (x0, y0) to (x1, y1) with the node's border
                         if (node.anchor) {
                             // Square: calculate intersection with square border
-                            const size = 35 * 1.2; // match your square half-size
+                            const size = 40 * 1.2; // match your square half-size
                             const cx = node.x, cy = node.y;
                             const dx = x1 - x0, dy = y1 - y0;
                             let tMin = Infinity, ix = cx, iy = cy;
@@ -2070,7 +2070,7 @@
                             // Circle: use radius
                             const dx = x1 - x0, dy = y1 - y0;
                             const distance = Math.sqrt(dx * dx + dy * dy);
-                            const r = 35;
+                            const r = 40;
                             return {
                                 x: node.x + (dx / distance) * r,
                                 y: node.y + (dy / distance) * r
@@ -2184,7 +2184,7 @@
                         const labelY = node.y;
 
                         // Calculate node radius for proper positioning
-                        const nodeRadius = node.anchor ? 30 : 35;
+                        const nodeRadius = node.anchor ? 35 : 40;
 
                         // Ensure label background doesn't completely cover the node
                         // Keep top and bottom edges of node visible (requirement 6.7)
@@ -2674,7 +2674,7 @@
                         if (distance === 0) return;
                         const unitX = dx / distance;
                         const unitY = dy / distance;
-                        const baseNodeRadius = 35;
+                        const baseNodeRadius = 40;
                         const sourceRadius = source.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
                         const targetRadius = target.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
                         const startX = source.x + unitX * sourceRadius;
@@ -2719,7 +2719,7 @@
                     nodes.forEach(node => {
                         const nodeColor = node.anchor ? 'rgba(239, 68, 68, 0.8)' : window.styleManager.getNodeColor(node.label);
                         const borderColor = 'rgba(0, 0, 0, 0.3)';
-                        const nodeRadius = node.anchor ? 35 : 30;
+                        const nodeRadius = node.anchor ? 40 : 35;
                         if (node.anchor) {
                             // Draw anchor nodes as squares
                             svgContent += `<rect x="${node.x - nodeRadius}" y="${node.y - nodeRadius}" width="${nodeRadius * 2}" height="${nodeRadius * 2}" fill="${nodeColor}" stroke="${borderColor}" stroke-width="${2 / transform.scale}"/>`;
