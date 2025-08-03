@@ -131,25 +131,20 @@ class GraphDataExtractor:
         pos = self._get_node_positions(graph)
         for node_key in graph.nodes():
             node_data = graph.nodes[node_key]
-            # Use the 'id' attribute from node_data if present, else fallback to node_key
             node_id = str(node_data['id']) if 'id' in node_data and node_data['id'] is not None else str(node_key)
             x, y = pos.get(node_key, (0, 0))
             is_anchor = node_data.get('anchor', 0) == 1
 
-            # Build label from all attributes except anchor, x, y
-            label_parts = []
-            for key, value in node_data.items():
-                if key not in {'anchor', 'x', 'y'} and value is not None:
-                    label_parts.append(f"{key}: {value}")
-            label = ", ".join(label_parts) if label_parts else node_id
-
-            # Build node dict dynamically, but ensure id, x, y, label, anchor are present and correct
+            # Build node dict dynamically, but ensure id, label, x, y, anchor are present and correct
             node_dict = dict(node_data)
             node_dict['id'] = node_id
             node_dict['x'] = float(x)
             node_dict['y'] = float(y)
-            node_dict['label'] = label
             node_dict['anchor'] = is_anchor
+
+            # Ensure 'label' is the type/category (not a display label)
+            if 'label' not in node_dict or node_dict['label'] is None:
+                node_dict['label'] = self._get_node_type(node_data)
 
             nodes.append(node_dict)
         return nodes
@@ -157,18 +152,15 @@ class GraphDataExtractor:
     def _extract_edges(self, graph: nx.Graph) -> List[Dict[str, Any]]:
         edges = []
         for source, target, edge_data in graph.edges(data=True):
-            # Use node 'id' attribute for source/target
             source_id = str(graph.nodes[source].get('id', source))
             target_id = str(graph.nodes[target].get('id', target))
-            # Use only the 'label' attribute for edge label, fallback to empty string
-            label = str(edge_data.get('label', ""))
-
-            # Build edge dict dynamically, but ensure source, target, label, directed are present and correct
             edge_dict = dict(edge_data)
             edge_dict['source'] = source_id
             edge_dict['target'] = target_id
-            edge_dict['label'] = label
             edge_dict['directed'] = graph.is_directed()
+            # Ensure 'label' is the type/category (not a display label)
+            if 'label' not in edge_dict or edge_dict['label'] is None:
+                edge_dict['label'] = self._get_edge_type(edge_data)
             edges.append(edge_dict)
         return edges
     

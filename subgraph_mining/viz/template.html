@@ -593,211 +593,227 @@
     <script>
         // Sample 7-node directed graph data
         const GRAPH_DATA = {
-            metadata: {
-                title: "Workflow Processing Pipeline",
-                nodeCount: 7,
-                edgeCount: 9,
-                isDirected: true,
-                density: 0.31
-            },
-            nodes: [
+        "metadata": {
+                "title": "Directed Graph with Anchors",
+                "nodeCount": 11,
+                "edgeCount": 10,
+                "isDirected": true,
+                "density": 0.091
+        },
+        "nodes": [
                 {
-                    id: 'start',
-                    x: -200, y: 0,
-                    type: 'trigger',
-                    label: 'Start Process',
-                    anchor: false,
-                    metadata: {
-                        status: 'active',
-                        priority: 'high'
-                    }
+                        "id": "enst00000316891",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-201",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": 27.65196752359671,
+                        "y": 197.0768524739416
                 },
                 {
-                    id: 'validate',
-                    x: -50, y: -120,
-                    type: 'validation',
-                    label: 'Validate Input',
-                    anchor: false,
-                    metadata: {
-                        rules: 15,
-                        success_rate: '98%'
-                    }
+                        "id": "enst00000441669",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-203",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": 198.15733023744193,
+                        "y": 37.6455322302267
                 },
                 {
-                    id: 'process',
-                    x: 100, y: 0,
-                    type: 'computation',
-                    label: 'Process Data',
-                    anchor: false,
-                    metadata: {
-                        cpu_usage: '65%',
-                        memory: '1.2GB'
-                    }
+                        "id": "q9h3h1-1",
+                        "label": "protein",
+                        "protein_name": "MOD5",
+                        "isoform_name": "1",
+                        "anchor": false,
+                        "x": -95.0809692854939,
+                        "y": -177.28703171738803
                 },
                 {
-                    id: 'store',
-                    x: -50, y: 120,
-                    type: 'storage',
-                    label: 'Store Results',
-                    anchor: false,
-                    metadata: {
-                        database: 'PostgreSQL',
-                        size: '2.5GB'
-                    }
+                        "id": "enst00000372818",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-202",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": -166.60054744627251,
+                        "y": 98.79798083873025
                 },
                 {
-                    id: 'notify',
-                    x: 250, y: -80,
-                    type: 'communication',
-                    label: 'Send Notification',
-                    anchor: false,
-                    metadata: {
-                        channels: ['email', 'slack'],
-                        delivery_rate: '99.5%'
-                    }
+                        "id": "enst00000491865",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-211",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": 134.0590518547878,
+                        "y": 137.61826291770697
                 },
                 {
-                    id: 'audit',
-                    x: 250, y: 80,
-                    type: 'logging',
-                    label: 'Audit Log',
-                    anchor: false,
-                    metadata: {
-                        retention: '90 days',
-                        format: 'JSON'
-                    }
+                        "id": "q9h3h1-4",
+                        "label": "protein",
+                        "protein_name": "MOD5",
+                        "isoform_name": "4",
+                        "anchor": false,
+                        "x": -93.3767504466559,
+                        "y": 183.95972216092807
                 },
                 {
-                    id: 'complete',
-                    x: 400, y: 0,
-                    type: 'terminal',
-                    label: 'Complete',
-                    anchor: false,
-                    metadata: {
-                        status: 'success',
-                        timestamp: new Date().toISOString()
-                    }
+                        "id": "q9h3h1-5",
+                        "label": "protein",
+                        "protein_name": "MOD5",
+                        "isoform_name": "5",
+                        "anchor": false,
+                        "x": 200.0,
+                        "y": -83.77624813100846
+                },
+                {
+                        "id": "enst00000465417",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-206",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": -151.2725718127031,
+                        "y": -93.40322484041486
+                },
+                {
+                        "id": "enst00000467774",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-207",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": -166.33749633917537,
+                        "y": 4.219155404037533
+                },
+                {
+                        "id": "enst00000462243",
+                        "label": "transcript",
+                        "transcript_name": "TRIT1-204",
+                        "gene_name": "TRIT1",
+                        "anchor": false,
+                        "x": 18.033079069290444,
+                        "y": -188.57476352637613
+                },
+                {
+                        "id": "ensg00000043514",
+                        "label": "gene",
+                        "gene_name": "TRIT1",
+                        "anchor": true,
+                        "x": 94.7669066451839,
+                        "y": -116.27623781038359
                 }
-            ],
-            edges: [
+        ],
+        "edges": [
                 {
-                    source: 'start',
-                    target: 'validate',
-                    type: 'control_flow',
-                    directed: true,
-                    label: 'input',
-                    metadata: {
-                        condition: 'always',
-                        weight: 1.0
-                    }
+                        "label": "translates_to",
+                        "weight": 1.0,
+                        "source": "enst00000316891",
+                        "target": "q9h3h1-1",
+                        "directed": true,
+                        "direction": "enst00000316891 -> q9h3h1-1",
                 },
                 {
-                    source: 'start',
-                    target: 'process',
-                    type: 'data_flow',
-                    directed: true,
-                    label: 'raw data',
-                    metadata: {
-                        format: 'JSON',
-                        size: 'variable'
-                    }
+                        "label": "translates_to",
+                        "weight": 1.0,
+                        "source": "enst00000441669",
+                        "target": "q9h3h1-5",
+                        "directed": true,
+                        "direction": "enst00000441669 -> q9h3h1-5",
                 },
                 {
-                    source: 'validate',
-                    target: 'process',
-                    type: 'control_flow',
-                    directed: true,
-                    label: 'validated',
-                    metadata: {
-                        condition: 'success',
-                        weight: 0.98
-                    }
+                        "label": "translates_to",
+                        "weight": 1.0,
+                        "source": "enst00000372818",
+                        "target": "q9h3h1-4",
+                        "directed": true,
+                        "direction": "enst00000372818 -> q9h3h1-4",
                 },
                 {
-                    source: 'process',
-                    target: 'store',
-                    type: 'data_flow',
-                    directed: true,
-                    label: 'results',
-                    metadata: {
-                        format: 'structured',
-                        compression: 'gzip'
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000316891",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000316891",
                 },
                 {
-                    source: 'process',
-                    target: 'notify',
-                    type: 'event',
-                    directed: true,
-                    label: 'success',
-                    metadata: {
-                        trigger: 'completion',
-                        async: true
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000441669",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000441669",
                 },
                 {
-                    source: 'process',
-                    target: 'audit',
-                    type: 'logging',
-                    directed: true,
-                    label: 'activity',
-                    metadata: {
-                        level: 'info',
-                        structured: true
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000372818",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000372818",
                 },
                 {
-                    source: 'store',
-                    target: 'complete',
-                    type: 'control_flow',
-                    directed: true,
-                    label: 'stored',
-                    metadata: {
-                        condition: 'success',
-                        weight: 0.99
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000491865",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000491865",
                 },
                 {
-                    source: 'notify',
-                    target: 'complete',
-                    type: 'control_flow',
-                    directed: true,
-                    label: 'notified',
-                    metadata: {
-                        condition: 'delivered',
-                        weight: 0.95
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000465417",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000465417",
                 },
                 {
-                    source: 'audit',
-                    target: 'complete',
-                    type: 'control_flow',
-                    directed: true,
-                    label: 'logged',
-                    metadata: {
-                        condition: 'recorded',
-                        weight: 1.0
-                    }
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000467774",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000467774",
+                },
+                {
+                        "label": "transcribed_to",
+                        "weight": 1.0,
+                        "source": "ensg00000043514",
+                        "target": "enst00000462243",
+                        "directed": true,
+                        "direction": "ensg00000043514 -> enst00000462243",
                 }
-            ],
-            legend: {
-                nodeTypes: [
-                    { type: 'trigger', color: 'rgba(34, 197, 94, 0.7)', description: 'Process triggers' },
-                    { type: 'validation', color: 'rgba(251, 191, 36, 0.7)', description: 'Validation steps' },
-                    { type: 'computation', color: 'rgba(59, 130, 246, 0.7)', description: 'Processing nodes' },
-                    { type: 'storage', color: 'rgba(168, 85, 247, 0.7)', description: 'Data storage' },
-                    { type: 'communication', color: 'rgba(236, 72, 153, 0.7)', description: 'Notifications' },
-                    { type: 'logging', color: 'rgba(156, 163, 175, 0.7)', description: 'Audit logging' },
-                    { type: 'terminal', color: 'rgba(239, 68, 68, 0.7)', description: 'End states' }
+        ],
+        "legend": {
+                "nodeTypes": [
+                        {
+                                "label": "gene",
+                                "color": "rgba(59, 130, 246, 0.7)",
+                                "description": "gene"
+                        },
+                        {
+                                "label": "transcript",
+                                "color": "rgba(34, 197, 94, 0.7)",
+                                "description": "transcript"
+                        },
+                        {
+                                "label": "protein",
+                                "color": "rgba(245, 101, 101, 0.7)",
+                                "description": "Protein"
+                        }
                 ],
-                edgeTypes: [
-                    { type: 'control_flow', color: 'rgba(59, 130, 246, 0.6)', description: 'Control flow' },
-                    { type: 'data_flow', color: 'rgba(34, 197, 94, 0.6)', description: 'Data transfer' },
-                    { type: 'event', color: 'rgba(251, 191, 36, 0.6)', description: 'Event triggers' },
-                    { type: 'logging', color: 'rgba(156, 163, 175, 0.6)', description: 'Audit trails' }
+                "edgeTypes": [
+                        {
+                                "label": "transcribed_to",
+                                "color": "rgba(34, 100, 94, 0.7)",
+                                "description": "transcribed_to"
+                        },
+                        {
+                                "label": "translates_to",
+                                "color": "rgba(245, 190, 101, 0.7)",
+                                "description": "translates_to"
+                        }
                 ]
-            }
-        };
+        }
+};
         
         // Dynamic Style Management System
         // This class handles automatic discovery of node and edge types from graph data
@@ -826,8 +842,8 @@
                 
                 // Discover all unique edge types
                 edges.forEach(edge => {
-                    if (edge.type) {
-                        this.discoveredEdgeTypes.add(edge.type);
+                    if (edge.label) {
+                        this.discoveredEdgeTypes.add(edge.label);
                     }
                 });
                 
@@ -2213,7 +2229,7 @@
             
             getEdgeColor(edge) {
                 // Get or generate color for this edge type
-                return window.styleManager.getEdgeColor(edge.type);
+                return window.styleManager.getEdgeColor(edge.label);
             }
             
             drawNodeLabels(nodes) {
@@ -2739,7 +2755,7 @@
                         const endY = target.y - unitY * targetRadius;
 
                         // Edge color
-                        const edgeColor = window.styleManager.getEdgeColor(edge.type);
+                        const edgeColor = window.styleManager.getEdgeColor(edge.label);
 
                         svgContent += `<line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${edgeColor}" stroke-width="${2 / transform.scale}"/>`;
 
@@ -2867,7 +2883,7 @@
                         colorBox.style.backgroundColor = nodeType.color;
                         
                         const label = document.createElement('span');
-                        label.textContent = nodeType.type;
+                        label.textContent = nodeType.label;
                         
                         item.appendChild(colorBox);
                         item.appendChild(label);
@@ -2875,8 +2891,8 @@
                         
                         // Populate StyleManager with predefined colors
                         if (window.styleManager) {
-                            window.styleManager.nodeTypeColors.set(nodeType.type, nodeType.color);
-                            window.styleManager.discoveredNodeTypes.add(nodeType.type);
+                            window.styleManager.nodeTypeColors.set(nodeType.label, nodeType.color);
+                            window.styleManager.discoveredNodeTypes.add(nodeType.label);
                         }
                     });
                     
@@ -2901,7 +2917,7 @@
                         colorBox.style.backgroundColor = edgeType.color;
                         
                         const label = document.createElement('span');
-                        label.textContent = edgeType.type;
+                        label.textContent = edgeType.label;
                         
                         item.appendChild(colorBox);
                         item.appendChild(label);
@@ -2909,8 +2925,8 @@
                         
                         // Populate StyleManager with predefined colors
                         if (window.styleManager) {
-                            window.styleManager.edgeTypeColors.set(edgeType.type, edgeType.color);
-                            window.styleManager.discoveredEdgeTypes.add(edgeType.type);
+                            window.styleManager.edgeTypeColors.set(edgeType.label, edgeType.color);
+                            window.styleManager.discoveredEdgeTypes.add(edgeType.label);
                         }
                     });
                     
