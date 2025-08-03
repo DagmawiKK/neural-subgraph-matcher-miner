@@ -1630,16 +1630,20 @@
             render() {
                 // Clear canvas
                 this.resetTransform();
-                this.drawNodeLabels(GRAPH_DATA.nodes);
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                
+
                 // Apply transform for graph content
                 this.applyTransform();
-                
-                // Draw graph content (will be implemented in later tasks)
+
+                // Draw graph content
                 this.drawGraph();
-                
-                // Reset transform for UI elements
+
+                // Draw node labels in world coordinates (with transform applied)
+                if (window.labelsEnabled) {
+                    this.drawNodeLabels(GRAPH_DATA.nodes);
+                }
+
+                // Reset transform for UI overlays if needed
                 this.resetTransform();
             }
             
@@ -2139,7 +2143,6 @@
             
             drawNodeLabels(nodes) {
                 const ctx = this.ctx;
-                // Use a fixed font size in screen pixels
                 const fontSize = 14;
                 ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
                 ctx.textAlign = 'center';
@@ -2147,14 +2150,13 @@
 
                 nodes.forEach(node => {
                     if (node.label) {
-                        // Convert node position to screen coordinates
-                        const screenPos = this.worldToScreen(node.x, node.y);
+                        // Use node.x, node.y directly (world coordinates)
+                        const labelX = node.x;
+                        const labelY = node.y;
 
-                        // Multi-line label support
                         let displayLabel = node.display_label || node.label;
-                        const lines = displayLabel.split('\n'); // or '\n' if your data uses single backslash
+                        const lines = displayLabel.split('\n');
 
-                        // Calculate width and height for all lines
                         let maxLineWidth = 0;
                         lines.forEach(line => {
                             const metrics = ctx.measureText(line);
@@ -2162,32 +2164,29 @@
                         });
                         const textHeight = fontSize;
                         const textWidth = maxLineWidth;
-                        const padding = 6; // fixed padding in screen pixels
+                        const padding = 6;
                         const bgWidth = textWidth + (padding * 2);
                         const bgHeight = lines.length * textHeight + (padding * 2);
 
-                        // Draw transparent rectangular background centered on node
                         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                         ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
                         ctx.lineWidth = 1;
 
-                        // Draw rounded rectangle for better aesthetics
                         const cornerRadius = 4;
                         this.drawRoundedRect(
                             ctx,
-                            screenPos.x - bgWidth / 2,
-                            screenPos.y - bgHeight / 2,
+                            labelX - bgWidth / 2,
+                            labelY - bgHeight / 2,
                             bgWidth,
                             bgHeight,
                             cornerRadius
                         );
 
-                        // Draw text centered on node, each line stacked vertically
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
                         const totalTextHeight = lines.length * textHeight;
-                        const startY = screenPos.y - totalTextHeight / 2 + textHeight / 2;
+                        const startY = labelY - totalTextHeight / 2 + textHeight / 2;
                         lines.forEach((line, i) => {
-                            ctx.fillText(line, screenPos.x, startY + i * textHeight);
+                            ctx.fillText(line, labelX, startY + i * textHeight);
                         });
                     }
                 });
