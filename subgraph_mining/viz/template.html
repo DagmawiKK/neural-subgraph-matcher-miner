@@ -2941,13 +2941,12 @@
             
             // Initialize style manager
             window.styleManager = new StyleManager();
-            window.styleManager.discoverTypes(GRAPH_DATA.nodes, GRAPH_DATA.edges);
 
-            
             // Initialize layout engine
             window.layoutEngine = new GraphLayoutEngine();
-            window.labelsEnabled = true;
+            window.labelsEnabled = true;            
             
+            window.uiManager = new UIManager();
             // Apply initial layout and discover types if graph data exists
             if (GRAPH_DATA && GRAPH_DATA.nodes && GRAPH_DATA.nodes.length > 0) {
                 window.styleManager.discoverTypes(GRAPH_DATA.nodes, GRAPH_DATA.edges);
@@ -2988,9 +2987,6 @@
             
             // Initialize navigation system
             window.canvasNavigator = new CanvasNavigator(canvas, ctx);
-            
-            // Initialize UI management system
-            window.uiManager = new UIManager();
             
             // Update title and stats
             document.getElementById('graph-title').textContent = GRAPH_DATA.metadata.title;
