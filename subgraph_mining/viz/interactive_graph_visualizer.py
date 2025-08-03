@@ -127,52 +127,85 @@ class GraphDataExtractor:
         }
     
     def _extract_nodes(self, graph: nx.Graph) -> List[Dict[str, Any]]:
+        """
+        Extract node data with positions, types, and attributes.
+        
+        Args:
+            graph: NetworkX graph object
+            
+        Returns:
+            List of node dictionaries with id, position, type, label, and metadata
+        """
         nodes = []
+        
+        # Generate initial layout if positions don't exist
         pos = self._get_node_positions(graph)
-        for node_key in graph.nodes():
-            node_data = graph.nodes[node_key]
-            node_id = str(node_data['id']) if 'id' in node_data and node_data['id'] is not None else str(node_key)
-            x, y = pos.get(node_key, (0, 0))
+        
+        for node_id in graph.nodes():
+            node_data = graph.nodes[node_id]
+            
+            # Get position
+            x, y = pos.get(node_id, (0, 0))
+            
+            # Determine node type
+            node_type = self._get_node_type(node_data)
+            
+            # Generate label
+            label = self._generate_node_label(node_id, node_data)
+            
+            # Check if anchor node
             is_anchor = node_data.get('anchor', 0) == 1
-
-            # Build label from all attributes except x, y, anchor
-            label_parts = []
-            for key, value in node_data.items():
-                if key not in {'x', 'y', 'anchor'} and value is not None:
-                    label_parts.append(f"{key}: {value}")
-            label = ", ".join(label_parts) if label_parts else node_id
-
-            # Start with all node_data fields
-            node_dict = dict(node_data)
-            # Ensure id, x, y, label, anchor are present and correct
-            node_dict['id'] = node_id
-            node_dict['x'] = float(x)
-            node_dict['y'] = float(y)
-            node_dict['label'] = label
-            node_dict['anchor'] = is_anchor
-
+            
+            # Extract metadata (all attributes except special ones)
+            metadata = self._extract_node_metadata(node_data)
+            
+            node_dict = {
+                'id': str(node_id),
+                'x': float(x),
+                'y': float(y),
+                'type': node_type,
+                'label': label,
+                'anchor': is_anchor,
+                'metadata': metadata
+            }
+            
             nodes.append(node_dict)
+        
         return nodes
     
     def _extract_edges(self, graph: nx.Graph) -> List[Dict[str, Any]]:
+        """
+        Extract edge data with direction, type, and attributes.
+        
+        Args:
+            graph: NetworkX graph object
+            
+        Returns:
+            List of edge dictionaries with source, target, type, and metadata
+        """
         edges = []
+        
         for source, target, edge_data in graph.edges(data=True):
-            # Use node 'id' attribute for source/target
-            source_id = str(graph.nodes[source].get('id', source))
-            target_id = str(graph.nodes[target].get('id', target))
-            # Build label from all edge attributes except source/target/directed
-            label_parts = []
-            for key, value in edge_data.items():
-                if key not in {'source', 'target', 'directed'} and value is not None:
-                    label_parts.append(f"{key}: {value}")
-            label = ", ".join(label_parts) if label_parts else ""
-            # Start with all edge_data fields
-            edge_dict = dict(edge_data)
-            edge_dict['source'] = source_id
-            edge_dict['target'] = target_id
-            edge_dict['label'] = label
-            edge_dict['directed'] = graph.is_directed()
+            # Determine edge type
+            edge_type = self._get_edge_type(edge_data)
+            
+            # Generate label
+            label = self._generate_edge_label(edge_data)
+            
+            # Extract metadata
+            metadata = self._extract_edge_metadata(edge_data)
+            
+            edge_dict = {
+                'source': str(source),
+                'target': str(target),
+                'type': edge_type,
+                'directed': graph.is_directed(),
+                'label': label,
+                'metadata': metadata
+            }
+            
             edges.append(edge_dict)
+        
         return edges
     
     def _get_node_positions(self, graph: nx.Graph) -> Dict[str, Tuple[float, float]]:
@@ -205,6 +238,103 @@ class GraphDataExtractor:
             pos = nx.circular_layout(graph, scale=200)
             return {n: (pos[n][0], pos[n][1]) for n in pos}
     
+    def _get_node_type(self, node_data: Dict[str, Any]) -> str:
+        """
+        Determine node type from node attributes.
+        
+        Args:
+            node_data: Dictionary of node attributes
+            
+        Returns:
+            String representing the node type
+        """
+        # Priority order for type determination
+        type_keys = ['type', 'label', 'category', 'kind', 'class']
+        
+        for key in type_keys:
+            if key in node_data and node_data[key] is not None:
+                return str(node_data[key])
+        
+        return 'default'
+    
+    def _get_edge_type(self, edge_data: Dict[str, Any]) -> str:
+        """
+        Determine edge type from edge attributes.
+
+        """
+        # Priority order for type determination
+        type_keys = ['type', 'label', 'relation', 'category', 'kind']
+        
+        for key in type_keys:
+            if key in edge_data and edge_data[key] is not None:
+                return str(edge_data[key])
+        
+        return 'default'
+    
+    def _generate_node_label(self, node_id: Any, node_data: Dict[str, Any]) -> str:
+        """
+        Generate display label for a node.
+        """
+        # Try to use explicit label first
+        if 'label' in node_data and node_data['label'] is not None:
+            return str(node_data['label'])
+        
+        # Use node ID as fallback
+        return str(node_id)
+    
+    def _generate_edge_label(self, edge_data: Dict[str, Any]) -> str:
+        """
+        Generate display label for an edge.
+        """
+        # Priority order for label determination
+        label_keys = ['label', 'type', 'relation', 'weight']
+        
+        for key in label_keys:
+            if key in edge_data and edge_data[key] is not None:
+                value = edge_data[key]
+                # Format numeric values nicely
+                if isinstance(value, float):
+                    return f"{value:.2f}" if abs(value) < 100 else f"{value:.1e}"
+                return str(value)
+        
+        return ''
+    
+    def _extract_node_metadata(self, node_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract metadata from node attributes, excluding special keys.
+        """
+        # Keys to exclude from metadata
+        excluded_keys = {'id', 'x', 'y', 'type', 'label', 'anchor'}
+        
+        metadata = {}
+        for key, value in node_data.items():
+            if key not in excluded_keys and value is not None:
+                # Format values for JSON serialization
+                if isinstance(value, (int, float, str, bool, list, dict)):
+                    metadata[key] = value
+                else:
+                    metadata[key] = str(value)
+        
+        return metadata
+    
+    def _extract_edge_metadata(self, edge_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract metadata from edge attributes, excluding special keys.
+        """
+        # Keys to exclude from metadata
+        excluded_keys = {'type', 'label', 'source', 'target', 'directed'}
+        
+        metadata = {}
+        for key, value in edge_data.items():
+            if key not in excluded_keys and value is not None:
+                # Format values for JSON serialization
+                if isinstance(value, (int, float, str, bool, list, dict)):
+                    metadata[key] = value
+                else:
+                    metadata[key] = str(value)
+        
+        return metadata
+    
     def _generate_legend(self, nodes: List[Dict[str, Any]], 
                         edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -213,19 +343,19 @@ class GraphDataExtractor:
         # Discover unique node types
         node_types = set()
         for node in nodes:
-            node_types.add(node['label'])
+            node_types.add(node['type'])
         
         # Discover unique edge types
         edge_types = set()
         for edge in edges:
-            edge_types.add(edge['label'])
+            edge_types.add(edge['type'])
         
         # Generate node type legend entries
         node_legend = []
         for i, node_type in enumerate(sorted(node_types)):
             color = self.color_palette[i % len(self.color_palette)]
             node_legend.append({
-                'label': node_type,
+                'type': node_type,
                 'color': color,
                 'description': f'{node_type.title()} nodes'
             })
@@ -235,7 +365,7 @@ class GraphDataExtractor:
         for i, edge_type in enumerate(sorted(edge_types)):
             color = self.edge_color_palette[i % len(self.edge_color_palette)]
             edge_legend.append({
-                'label': edge_type,
+                'type': edge_type,
                 'color': color,
                 'description': f'{edge_type.title()} edges'
             })
@@ -277,7 +407,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
             return False
         
         # Validate first node structure
-        node_keys = ['id', 'x', 'y', 'label', 'anchor']
+        node_keys = ['id', 'x', 'y', 'type', 'label', 'anchor', 'metadata']
         if not all(key in nodes[0] for key in node_keys):
             return False
         
@@ -288,7 +418,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
         
         # If edges exist, validate structure
         if len(edges) > 0:
-            edge_keys = ['source', 'target', 'directed', 'label']
+            edge_keys = ['source', 'target', 'type', 'directed', 'label', 'metadata']
             if not all(key in edges[0] for key in edge_keys):
                 return False
         
@@ -642,27 +772,20 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         # Step 3: Generate HTML visualization
         logger.info("Generating HTML visualization...")
         try:
-            import os
-            # Ensure output directory exists
-            output_dir = os.path.join(os.path.dirname(__file__), "../../plots/cluster")
-            output_dir = os.path.abspath(output_dir)
-            os.makedirs(output_dir, exist_ok=True)
-
-            template_path = os.path.join(os.path.dirname(__file__), "template.html")
-            processor = HTMLTemplateProcessor(template_path)
+            processor = HTMLTemplateProcessor("template.html")
             
             # Generate filename based on graph characteristics and count_by_size
             base_filename = _generate_pattern_filename(pattern, count_by_size)
             
-            # Process template and create HTML file in plots/cluster
+            # Process template and create HTML file
             output_path = processor.process_template(
                 graph_data=graph_data,
                 output_filename=base_filename,
-                output_dir=output_dir
+                output_dir="."
             )
             
             logger.info(f"HTML visualization created successfully: {output_path}")
-
+            
         except FileNotFoundError as e:
             logger.error(f"Template file not found: {str(e)}")
             logger.info("Make sure template.html exists in the current directory")
@@ -738,9 +861,9 @@ def _generate_pattern_filename(pattern: nx.Graph, count_by_size: Dict[int, int])
         
         # Edge types
         edge_types = sorted(set(
-            data.get('label', '') 
+            data.get('type', '') 
             for u, v, data in pattern.edges(data=True) 
-            if data.get('label', '')
+            if data.get('type', '')
         ))
         if edge_types:
             components.append('edges-' + '-'.join(edge_types))
