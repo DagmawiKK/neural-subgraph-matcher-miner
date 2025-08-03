@@ -2615,20 +2615,48 @@
                 // Check nodes in reverse z-order (top to bottom) for proper layering
                 const orderedNodes = this.getNodesInZOrder(nodes);
                 
+                const fontSize = Math.max(10, 12 / this.transform.scale);
+                const padding = 3 / this.transform.scale;
+
                 for (let i = orderedNodes.length - 1; i >= 0; i--) {
                     const node = orderedNodes[i];
+                    let displayLabel = node.display_label || node.label;
+                    const lines = displayLabel.split('\\n');
+                    this.ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+                    let maxLineWidth = 0;
+                    lines.forEach(line => {
+                        const metrics = this.ctx.measureText(line);
+                        if (metrics.width > maxLineWidth) maxLineWidth = metrics.width;
+                    });
+                    const textHeight = fontSize;
+                    const bgWidth = maxLineWidth + (padding * 2);
+                    const bgHeight = lines.length * textHeight + (padding * 2);
+                    const labelX = node.x;
+                    const labelY = node.y;
+                    const labelLeft = labelX - bgWidth / 2;
+                    const labelRight = labelX + bgWidth / 2;
+                    const labelTop = labelY - bgHeight / 2;
+                    const labelBottom = labelY + bgHeight / 2;
+
+                    if (
+                        worldX >= labelLeft &&
+                        worldX <= labelRight &&
+                        worldY >= labelTop &&
+                        worldY <= labelBottom
+                    ) {
+                        return node;
+                    }
+
                     const distance = Math.sqrt(
                         Math.pow(worldX - node.x, 2) + Math.pow(worldY - node.y, 2)
                     );
-                    
-                    // Use slightly larger radius for easier interaction
                     const hitRadius = node.anchor ? this.hoverRadius * 1.2 : this.hoverRadius;
-                    
+
                     if (distance <= hitRadius) {
                         return node;
                     }
                 }
-                
+
                 return null;
             }
             
