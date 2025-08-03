@@ -129,38 +129,24 @@ class GraphDataExtractor:
     def _extract_nodes(self, graph: nx.Graph) -> List[Dict[str, Any]]:
         """
         Extract node data with positions, types, and attributes.
-        
-        Args:
-            graph: NetworkX graph object
-            
-        Returns:
-            List of node dictionaries with id, position, type, label, and metadata
+        Uses the 'id' attribute from node_data if present, otherwise falls back to the NetworkX node key.
         """
         nodes = []
-        
-        # Generate initial layout if positions don't exist
         pos = self._get_node_positions(graph)
-        
-        for node_id in graph.nodes():
-            node_data = graph.nodes[node_id]
-            
-            # Get position
-            x, y = pos.get(node_id, (0, 0))
-            
-            # Determine node type
+
+        for node_key in graph.nodes():
+            node_data = graph.nodes[node_key]
+            # Use the 'id' attribute from node_data if it exists, else fallback to node_key
+            node_id = str(node_data['id']) if 'id' in node_data and node_data['id'] is not None else str(node_key)
+
+            x, y = pos.get(node_key, (0, 0))
             node_type = self._get_node_type(node_data)
-            
-            # Generate label
             label = self._generate_node_label(node_id, node_data)
-            
-            # Check if anchor node
             is_anchor = node_data.get('anchor', 0) == 1
-            
-            # Extract metadata (all attributes except special ones)
             metadata = self._extract_node_metadata(node_data)
-            
+
             node_dict = {
-                'id': str(node_id),
+                'id': node_id,
                 'x': float(x),
                 'y': float(y),
                 'type': node_type,
@@ -168,9 +154,8 @@ class GraphDataExtractor:
                 'anchor': is_anchor,
                 'metadata': metadata
             }
-            
             nodes.append(node_dict)
-        
+
         return nodes
     
     def _extract_edges(self, graph: nx.Graph) -> List[Dict[str, Any]]:
@@ -273,14 +258,15 @@ class GraphDataExtractor:
     
     def _generate_node_label(self, node_id: Any, node_data: Dict[str, Any]) -> str:
         """
-        Generate display label for a node.
+        Generate display label for a node using all attributes except id, anchor, x, y, and type.
         """
-        # Try to use explicit label first
-        if 'label' in node_data and node_data['label'] is not None:
-            return str(node_data['label'])
-        
-        # Use node ID as fallback
-        return str(node_id)
+        excluded_keys = {'id', 'anchor', 'x', 'y', 'type'}
+        label_parts = []
+        for key, value in node_data.items():
+            if key not in excluded_keys and value is not None:
+                label_parts.append(f"{key}: {value}")
+        # If nothing else, fallback to node_id
+        return "\n".join(label_parts) if label_parts else str(node_id)
     
     def _generate_edge_label(self, edge_data: Dict[str, Any]) -> str:
         """
