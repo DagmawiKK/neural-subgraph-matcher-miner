@@ -258,15 +258,12 @@ class GraphDataExtractor:
     
     def _generate_node_label(self, node_id: Any, node_data: Dict[str, Any]) -> str:
         """
-        Generate display label for a node using all attributes except id, anchor, x, y, and type.
+        Generate display label for a node using its metadata (already filtered).
         """
-        excluded_keys = {'id', 'anchor', 'x', 'y', 'type'}
-        label_parts = []
-        for key, value in node_data.items():
-            if key not in excluded_keys and value is not None:
-                label_parts.append(f"{key}: {value}")
-        # If nothing else, fallback to node_id
-        return "\n".join(label_parts) if label_parts else str(node_id)
+        # Use the metadata dict to build the label
+        metadata = self._extract_node_metadata(node_data)
+        label_parts = [f"{k}: {v}" for k, v in metadata.items()]
+        return ", ".join(label_parts) if label_parts else str(node_id)
     
     def _generate_edge_label(self, edge_data: Dict[str, Any]) -> str:
         """
@@ -521,7 +518,6 @@ class HTMLTemplateProcessor:
         try:
             # Convert graph data to JSON with proper formatting
             json_data = json.dumps(graph_data, indent=8, ensure_ascii=False)
-            json_data = json_data.replace('\n', '\\n')
             
             # Find the GRAPH_DATA placeholder and replace it
             # Look for the pattern: const GRAPH_DATA = { ... };
