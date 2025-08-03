@@ -2212,7 +2212,7 @@
             
             drawEdgeLabels(edges, nodes) {
                 const ctx = this.ctx;
-                const fontSize = Math.max(8, 10 / this.transform.scale);
+                const fontSize = Math.max(10, 12 / this.transform.scale);
                 ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -2917,6 +2917,8 @@
             
             // Initialize style manager
             window.styleManager = new StyleManager();
+            window.styleManager.discoverTypes(GRAPH_DATA.nodes, GRAPH_DATA.edges);
+
             
             // Initialize layout engine
             window.layoutEngine = new GraphLayoutEngine();
