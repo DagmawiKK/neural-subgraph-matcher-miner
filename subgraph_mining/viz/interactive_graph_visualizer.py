@@ -302,17 +302,17 @@ class GraphDataExtractor:
     def _generate_legend(self, nodes: List[Dict[str, Any]], 
                         edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Generate legend data based on discovered node and edge types.
+        Generate legend data based on discovered node and edge labels.
         """
-        # Discover unique node types
+        # Discover unique node labels
         node_types = set()
         for node in nodes:
-            node_types.add(node['type'])
+            node_types.add(node['label'])
         
-        # Discover unique edge types
+        # Discover unique edge labels
         edge_types = set()
         for edge in edges:
-            edge_types.add(edge['type'])
+            edge_types.add(edge['label'])
         
         # Generate node type legend entries
         node_legend = []
