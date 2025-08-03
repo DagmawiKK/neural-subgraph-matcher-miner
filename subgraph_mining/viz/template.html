@@ -1630,6 +1630,7 @@
             render() {
                 // Clear canvas
                 this.resetTransform();
+                this.drawNodeLabels(GRAPH_DATA.nodes);
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                 
                 // Apply transform for graph content
