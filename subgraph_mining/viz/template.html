@@ -2262,7 +2262,7 @@
                         
                         // Handle horizontal overflow for long labels
                         const maxLabelWidth = 120 / this.transform.scale; // Maximum label width in world coordinates
-                        let displayLabel = node.label;
+                        let displayLabel = node.display_label || node.label;
                         let textMetrics = ctx.measureText(displayLabel);
                         
                         // Truncate label if it's too long and add ellipsis
@@ -2313,7 +2313,10 @@
                         
                         // Draw text centered on node
                         ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
-                        ctx.fillText(displayLabel, labelX, labelY);
+                        const lines = displayLabel.split('\\n');
+                        lines.forEach((line, i) => {
+                            ctx.fillText(line, labelX, labelY + (i - (lines.length-1)/2) * textHeight);
+                        });
                         
                         // Reset filter effects
                         ctx.filter = 'none';
