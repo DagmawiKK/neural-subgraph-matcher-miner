@@ -2138,34 +2138,20 @@
             
             drawNodeLabels(nodes) {
                 const ctx = this.ctx;
-                const fontSize = Math.max(10, 12 / this.transform.scale);
+                // Use a fixed font size in screen pixels
+                const fontSize = 14;
                 ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
                 nodes.forEach(node => {
                     if (node.label) {
-                        // Apply isolation effects
-                        const isIsolated = this.isolatedNode !== null;
-                        const isIsolatedNode = this.isolatedNode && this.isolatedNode.id === node.id;
-                        const isConnectedToIsolated = isIsolated && !isIsolatedNode && this.isNodeConnectedToIsolated(node);
-
-                        let bgOpacity = 0.7;
-                        let textOpacity = 0.95;
-                        let borderOpacity = 0.15;
-
-                        if (isIsolated && !isIsolatedNode && !isConnectedToIsolated) {
-                            ctx.filter = 'blur(1px)';
-                            bgOpacity = 0.3;
-                            textOpacity = 0.3;
-                            borderOpacity = 0.1;
-                        } else {
-                            ctx.filter = 'none';
-                        }
+                        // Convert node position to screen coordinates
+                        const screenPos = this.worldToScreen(node.x, node.y);
 
                         // Multi-line label support
                         let displayLabel = node.display_label || node.label;
-                        const lines = displayLabel.split('\n'); // Use '\\n' if your Python outputs double-backslash
+                        const lines = displayLabel.split('\\n'); // or '\n' if your data uses single backslash
 
                         // Calculate width and height for all lines
                         let maxLineWidth = 0;
@@ -2175,50 +2161,33 @@
                         });
                         const textHeight = fontSize;
                         const textWidth = maxLineWidth;
-                        const padding = 3 / this.transform.scale;
+                        const padding = 6; // fixed padding in screen pixels
                         const bgWidth = textWidth + (padding * 2);
                         const bgHeight = lines.length * textHeight + (padding * 2);
 
-                        // Position label centered on node
-                        const labelX = node.x;
-                        const labelY = node.y;
-
-                        // Calculate node radius for proper positioning
-                        let nodeRadius = node.anchor ? 35 : 40;
-
-                        // If label is taller than node, increase node radius to fit label
-                        const minNodeRadius = (bgHeight / 2) + 4; // 4px padding
-                        if (nodeRadius < minNodeRadius) {
-                            nodeRadius = minNodeRadius;
-                        }
-                        const adjustedBgHeight = bgHeight;
-
                         // Draw transparent rectangular background centered on node
-                        ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
-                        ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
-                        ctx.lineWidth = 0.5 / this.transform.scale;
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+                        ctx.lineWidth = 1;
 
                         // Draw rounded rectangle for better aesthetics
-                        const cornerRadius = 2 / this.transform.scale;
+                        const cornerRadius = 4;
                         this.drawRoundedRect(
                             ctx,
-                            labelX - bgWidth / 2,
-                            labelY - adjustedBgHeight / 2,
+                            screenPos.x - bgWidth / 2,
+                            screenPos.y - bgHeight / 2,
                             bgWidth,
-                            adjustedBgHeight,
+                            bgHeight,
                             cornerRadius
                         );
 
                         // Draw text centered on node, each line stacked vertically
-                        ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
                         const totalTextHeight = lines.length * textHeight;
-                        const startY = labelY - totalTextHeight / 2 + textHeight / 2;
+                        const startY = screenPos.y - totalTextHeight / 2 + textHeight / 2;
                         lines.forEach((line, i) => {
-                            ctx.fillText(line, labelX, startY + i * textHeight);
+                            ctx.fillText(line, screenPos.x, startY + i * textHeight);
                         });
-
-                        // Reset filter effects
-                        ctx.filter = 'none';
                     }
                 });
             }
