@@ -371,7 +371,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
             return False
         
         # Validate first node structure
-        node_keys = ['id', 'x', 'y', 'type', 'label', 'anchor', 'metadata']
+        node_keys = ['id', 'x', 'y', 'label', 'anchor']
         if not all(key in nodes[0] for key in node_keys):
             return False
         
@@ -382,7 +382,7 @@ def validate_graph_data(graph_data: Dict[str, Any]) -> bool:
         
         # If edges exist, validate structure
         if len(edges) > 0:
-            edge_keys = ['source', 'target', 'type', 'directed', 'label', 'metadata']
+            edge_keys = ['source', 'target', 'directed', 'label']
             if not all(key in edges[0] for key in edge_keys):
                 return False
         
