@@ -772,7 +772,9 @@ def visualize_pattern_graph_ext(pattern, args, count_by_size):
         # Step 3: Generate HTML visualization
         logger.info("Generating HTML visualization...")
         try:
-            processor = HTMLTemplateProcessor("template.html")
+            import os
+            template_path = os.path.join(os.path.dirname(__file__), "template.html")
+            processor = HTMLTemplateProcessor(template_path)
             
             # Generate filename based on graph characteristics and count_by_size
             base_filename = _generate_pattern_filename(pattern, count_by_size)
