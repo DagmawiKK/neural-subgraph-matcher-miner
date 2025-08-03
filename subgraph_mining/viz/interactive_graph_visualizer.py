@@ -140,7 +140,7 @@ class GraphDataExtractor:
             for key, value in node_data.items():
                 if key not in {'anchor', 'x', 'y'} and value is not None:
                     display_label_parts.append(f"{key}: {value}")
-            display_label = "\n".join(display_label_parts) if display_label_parts else node_id
+            display_label = "\\n".join(display_label_parts) if display_label_parts else node_id
 
             node_dict = dict(node_data)
             node_dict['id'] = node_id
