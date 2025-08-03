@@ -1,0 +1,3212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <title>Interactive Graph Visualizer</title>
+    <style>
+        :root {
+            /* Color Palette - Light Theme */
+            --bg-primary: #fafafa;
+            --bg-secondary: rgba(255, 255, 255, 0.9);
+            --border-light: rgba(0, 0, 0, 0.1);
+            --text-primary: #374151;
+            --text-secondary: #6b7280;
+            
+            /* Node Colors */
+            --node-default: rgba(59, 130, 246, 0.7);
+            --node-anchor: rgba(239, 68, 68, 0.8);
+            --node-border: rgba(0, 0, 0, 0.3);
+            
+            /* Edge Colors */
+            --edge-default: rgba(107, 114, 128, 0.6);
+            --edge-hover: rgba(59, 130, 246, 0.8);
+            
+            /* UI Elements */
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --card-border: rgba(0, 0, 0, 0.1);
+            
+            /* Grid Colors */
+            --grid-minor: rgba(0, 0, 0, 0.03);
+            --grid-major: rgba(0, 0, 0, 0.08);
+            --grid-axis: rgba(59, 130, 246, 0.15);
+            --grid-dots: rgba(0, 0, 0, 0.1);
+            --grid-center: rgba(59, 130, 246, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Full-screen canvas container */
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #graph-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+            background-color: var(--bg-primary);
+            background-image: 
+                radial-gradient(circle at 1px 1px, rgba(0,0,0,0.02) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+
+        #graph-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* Grid background overlay - disabled since we draw grid on canvas */
+        #grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none; /* Grid is now drawn on canvas for proper transformation */
+        }
+
+        /* Base UI card styling */
+        .ui-card {
+            position: absolute;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            padding: 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        /* Floating UI component positions */
+        .top-left {
+            top: 20px;
+            left: 20px;
+        }
+
+        .top-center {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .top-right {
+            top: 20px;
+            right: 20px;
+        }
+
+        .bottom-right-upper {
+            bottom: 180px;
+            right: 20px;
+        }
+
+        .bottom-right-lower {
+            bottom: 20px;
+            right: 20px;
+        }
+
+        /* Plots dropdown styling */
+        #plots-dropdown {
+            min-width: 200px;
+            position: relative;
+        }
+
+        #plots-dropdown .dropdown-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            background: white;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        #plots-dropdown .dropdown-header:hover {
+            background: var(--bg-primary);
+            border-color: var(--text-secondary);
+        }
+
+        #plots-dropdown .dropdown-arrow {
+            font-size: 12px;
+            transition: transform 0.2s ease;
+        }
+
+        #plots-dropdown.open .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        #plots-dropdown .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            box-shadow: var(--card-shadow);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1001;
+            display: none;
+        }
+
+        #plots-dropdown.open .dropdown-menu {
+            display: block;
+        }
+
+        #plots-dropdown .dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-light);
+            transition: background-color 0.2s ease;
+        }
+
+        #plots-dropdown .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        #plots-dropdown .dropdown-item:hover {
+            background-color: var(--bg-primary);
+        }
+
+        #plots-dropdown .dropdown-item.current {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: rgba(59, 130, 246, 1);
+            font-weight: 500;
+        }
+
+        #plots-dropdown label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        /* Title bar styling */
+        #title-bar {
+            text-align: center;
+            font-weight: 600;
+            font-size: 16px;
+            min-width: 300px;
+        }
+
+        #title-bar .subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Zoom controls styling */
+        #zoom-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #zoom-controls button {
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            background: white;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        #zoom-controls button:hover {
+            background: var(--bg-primary);
+            border-color: var(--text-secondary);
+        }
+
+        #zoom-controls button:active {
+            transform: scale(0.95);
+        }
+
+        /* Legend card styling */
+        #legend-card {
+            min-width: 220px;
+            max-width: 280px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        #legend-card h3 {
+            margin-bottom: 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-light);
+            padding-bottom: 8px;
+        }
+
+        .legend-section {
+            margin-bottom: 16px;
+        }
+
+        .legend-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .legend-section h4 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            padding: 2px 0;
+        }
+
+        .legend-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .legend-color {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid var(--border-light);
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-shape {
+            width: 18px;
+            height: 18px;
+            border: 1px solid var(--border-light);
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-item span {
+            color: var(--text-primary);
+            font-weight: 500;
+            line-height: 1.2;
+        }
+
+        /* Controls card styling */
+        #controls-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 200px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .control-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: var(--node-default);
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .export-buttons button {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            background: white;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .export-buttons button:hover {
+            background: var(--bg-primary);
+            border-color: var(--text-secondary);
+        }
+
+        /* Context menu styling */
+        #context-menu {
+            position: absolute;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            padding: 4px 0;
+            min-width: 120px;
+        }
+
+        #context-menu.hidden {
+            display: none;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: background-color 0.2s ease;
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--bg-primary);
+        }
+
+        /* Isolation effects */
+        .node-isolated {
+            filter: blur(2px);
+            opacity: 0.3;
+        }
+
+        .edge-isolated {
+            filter: blur(2px);
+            opacity: 0.2;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .ui-card {
+                padding: 8px;
+                font-size: 12px;
+            }
+            
+            .top-left, .top-right {
+                top: 10px;
+            }
+            
+            .top-left {
+                left: 10px;
+            }
+            
+            .top-right {
+                right: 10px;
+            }
+            
+            .bottom-right-upper {
+                bottom: 140px;
+                right: 10px;
+            }
+            
+            .bottom-right-lower {
+                bottom: 10px;
+                right: 10px;
+            }
+            
+            #title-bar {
+                min-width: 200px;
+                font-size: 14px;
+            }
+            
+            #zoom-controls button {
+                width: 32px;
+                height: 32px;
+                font-size: 16px;
+            }
+            
+            #legend-card, #controls-card {
+                min-width: 160px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .ui-card {
+                padding: 6px;
+                font-size: 11px;
+            }
+            
+            #title-bar {
+                min-width: 150px;
+                font-size: 12px;
+            }
+            
+            #zoom-controls button {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+            
+            #legend-card, #controls-card {
+                min-width: 140px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Full-screen canvas container -->
+    <div id="canvas-container">
+        <canvas id="graph-canvas"></canvas>
+        <div id="grid-overlay"></div>
+    </div>
+    
+    <!-- Floating UI Components -->
+    
+    <!-- Plots dropdown in top-left corner -->
+    <div id="plots-dropdown" class="ui-card top-left">
+        <label>Plots</label>
+        <div class="dropdown-header" id="plots-header">
+            <span id="plots-current">Select a visualization...</span>
+            <span class="dropdown-arrow">▼</span>
+        </div>
+        <div class="dropdown-menu" id="plots-menu">
+            <!-- Menu items will be populated by JavaScript -->
+        </div>
+    </div>
+    
+    <!-- Title bar at center-top -->
+    <div id="title-bar" class="ui-card top-center">
+        <div id="graph-title">Graph Visualization</div>
+        <div class="subtitle" id="graph-stats">Loading...</div>
+    </div>
+    
+    <!-- Zoom controls in top-right corner -->
+    <div id="zoom-controls" class="ui-card top-right">
+        <button id="zoom-in" title="Zoom In">+</button>
+        <button id="zoom-out" title="Zoom Out">−</button>
+        <button id="recenter" title="Recenter">⌂</button>
+    </div>
+    
+    <!-- Legend card in bottom-right area (upper) -->
+    <div id="legend-card" class="ui-card bottom-right-upper">
+        <h3>Legend</h3>
+        <div id="legend-content">
+            <!-- Legend items will be populated by JavaScript -->
+        </div>
+    </div>
+    
+    <!-- Controls card in bottom-right area (lower) -->
+    <div id="controls-card" class="ui-card bottom-right-lower">
+        <div class="control-group">
+            <label>Show Labels</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="label-toggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        
+        <div class="control-group">
+            <label>Export</label>
+            <div class="export-buttons">
+                <button id="export-pdf">PDF</button>
+                <button id="export-svg">SVG</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Context Menu -->
+    <div id="context-menu" class="hidden">
+        <div class="context-menu-item" id="isolate-node">Isolate</div>
+        <div class="context-menu-item" id="copy-label">Copy Label</div>
+        <div class="context-menu-item" id="cancel-isolate" style="display: none;">Cancel Isolate</div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script>
+        // Sample 7-node directed graph data
+        const GRAPH_DATA = {
+            metadata: {
+                title: "Workflow Processing Pipeline",
+                nodeCount: 7,
+                edgeCount: 9,
+                isDirected: true,
+                density: 0.31
+            },
+            nodes: [
+                {
+                    id: 'start',
+                    x: -200, y: 0,
+                    type: 'trigger',
+                    label: 'Start Process',
+                    anchor: false,
+                    metadata: {
+                        status: 'active',
+                        priority: 'high'
+                    }
+                },
+                {
+                    id: 'validate',
+                    x: -50, y: -120,
+                    type: 'validation',
+                    label: 'Validate Input',
+                    anchor: false,
+                    metadata: {
+                        rules: 15,
+                        success_rate: '98%'
+                    }
+                },
+                {
+                    id: 'process',
+                    x: 100, y: 0,
+                    type: 'computation',
+                    label: 'Process Data',
+                    anchor: false,
+                    metadata: {
+                        cpu_usage: '65%',
+                        memory: '1.2GB'
+                    }
+                },
+                {
+                    id: 'store',
+                    x: -50, y: 120,
+                    type: 'storage',
+                    label: 'Store Results',
+                    anchor: false,
+                    metadata: {
+                        database: 'PostgreSQL',
+                        size: '2.5GB'
+                    }
+                },
+                {
+                    id: 'notify',
+                    x: 250, y: -80,
+                    type: 'communication',
+                    label: 'Send Notification',
+                    anchor: false,
+                    metadata: {
+                        channels: ['email', 'slack'],
+                        delivery_rate: '99.5%'
+                    }
+                },
+                {
+                    id: 'audit',
+                    x: 250, y: 80,
+                    type: 'logging',
+                    label: 'Audit Log',
+                    anchor: false,
+                    metadata: {
+                        retention: '90 days',
+                        format: 'JSON'
+                    }
+                },
+                {
+                    id: 'complete',
+                    x: 400, y: 0,
+                    type: 'terminal',
+                    label: 'Complete',
+                    anchor: false,
+                    metadata: {
+                        status: 'success',
+                        timestamp: new Date().toISOString()
+                    }
+                }
+            ],
+            edges: [
+                {
+                    source: 'start',
+                    target: 'validate',
+                    type: 'control_flow',
+                    directed: true,
+                    label: 'input',
+                    metadata: {
+                        condition: 'always',
+                        weight: 1.0
+                    }
+                },
+                {
+                    source: 'start',
+                    target: 'process',
+                    type: 'data_flow',
+                    directed: true,
+                    label: 'raw data',
+                    metadata: {
+                        format: 'JSON',
+                        size: 'variable'
+                    }
+                },
+                {
+                    source: 'validate',
+                    target: 'process',
+                    type: 'control_flow',
+                    directed: true,
+                    label: 'validated',
+                    metadata: {
+                        condition: 'success',
+                        weight: 0.98
+                    }
+                },
+                {
+                    source: 'process',
+                    target: 'store',
+                    type: 'data_flow',
+                    directed: true,
+                    label: 'results',
+                    metadata: {
+                        format: 'structured',
+                        compression: 'gzip'
+                    }
+                },
+                {
+                    source: 'process',
+                    target: 'notify',
+                    type: 'event',
+                    directed: true,
+                    label: 'success',
+                    metadata: {
+                        trigger: 'completion',
+                        async: true
+                    }
+                },
+                {
+                    source: 'process',
+                    target: 'audit',
+                    type: 'logging',
+                    directed: true,
+                    label: 'activity',
+                    metadata: {
+                        level: 'info',
+                        structured: true
+                    }
+                },
+                {
+                    source: 'store',
+                    target: 'complete',
+                    type: 'control_flow',
+                    directed: true,
+                    label: 'stored',
+                    metadata: {
+                        condition: 'success',
+                        weight: 0.99
+                    }
+                },
+                {
+                    source: 'notify',
+                    target: 'complete',
+                    type: 'control_flow',
+                    directed: true,
+                    label: 'notified',
+                    metadata: {
+                        condition: 'delivered',
+                        weight: 0.95
+                    }
+                },
+                {
+                    source: 'audit',
+                    target: 'complete',
+                    type: 'control_flow',
+                    directed: true,
+                    label: 'logged',
+                    metadata: {
+                        condition: 'recorded',
+                        weight: 1.0
+                    }
+                }
+            ],
+            legend: {
+                nodeTypes: [
+                    { type: 'trigger', color: 'rgba(34, 197, 94, 0.7)', description: 'Process triggers' },
+                    { type: 'validation', color: 'rgba(251, 191, 36, 0.7)', description: 'Validation steps' },
+                    { type: 'computation', color: 'rgba(59, 130, 246, 0.7)', description: 'Processing nodes' },
+                    { type: 'storage', color: 'rgba(168, 85, 247, 0.7)', description: 'Data storage' },
+                    { type: 'communication', color: 'rgba(236, 72, 153, 0.7)', description: 'Notifications' },
+                    { type: 'logging', color: 'rgba(156, 163, 175, 0.7)', description: 'Audit logging' },
+                    { type: 'terminal', color: 'rgba(239, 68, 68, 0.7)', description: 'End states' }
+                ],
+                edgeTypes: [
+                    { type: 'control_flow', color: 'rgba(59, 130, 246, 0.6)', description: 'Control flow' },
+                    { type: 'data_flow', color: 'rgba(34, 197, 94, 0.6)', description: 'Data transfer' },
+                    { type: 'event', color: 'rgba(251, 191, 36, 0.6)', description: 'Event triggers' },
+                    { type: 'logging', color: 'rgba(156, 163, 175, 0.6)', description: 'Audit trails' }
+                ]
+            }
+        };
+        
+        // Dynamic Style Management System
+        // This class handles automatic discovery of node and edge types from graph data
+        // and generates a dynamic legend with proper color mapping and spacing
+        // Implements requirements 5.1, 5.2, 5.3, 5.4 for legend generation
+        class StyleManager {
+            constructor() {
+                this.nodeTypeColors = new Map();
+                this.edgeTypeColors = new Map();
+                this.discoveredNodeTypes = new Set();
+                this.discoveredEdgeTypes = new Set();
+                this.colorSeed = 0;
+            }
+            
+            discoverTypes(nodes, edges) {
+                // Clear previous discoveries for fresh analysis
+                this.discoveredNodeTypes.clear();
+                this.discoveredEdgeTypes.clear();
+                
+                // Discover all unique node types (excluding anchors as they have special handling)
+                nodes.forEach(node => {
+                    if (node.label && !node.anchor) {
+                        this.discoveredNodeTypes.add(node.label);
+                    }
+                });
+                
+                // Discover all unique edge types
+                edges.forEach(edge => {
+                    if (edge.type) {
+                        this.discoveredEdgeTypes.add(edge.type);
+                    }
+                });
+                
+                // Generate colors for discovered types
+                this.generateColorsForTypes();
+                
+                // Update legend immediately after discovery
+                this.updateLegend();
+                
+                // Validate requirements are met
+                this.validateLegendRequirements();
+                
+                console.log(`Legend updated: ${this.discoveredNodeTypes.size} node types, ${this.discoveredEdgeTypes.size} edge types`);
+            }
+            
+            generateColorsForTypes() {
+                // Reset color seed for consistent color generation
+                this.colorSeed = 0;
+                
+                // Generate colors for node types with better distribution
+                const sortedNodeTypes = Array.from(this.discoveredNodeTypes).sort();
+                sortedNodeTypes.forEach(type => {
+                    if (!this.nodeTypeColors.has(type)) {
+                        this.nodeTypeColors.set(type, this.generateLightTransparentColor(0.7));
+                    }
+                });
+                
+                // Generate colors for edge types with slightly more transparency
+                const sortedEdgeTypes = Array.from(this.discoveredEdgeTypes).sort();
+                sortedEdgeTypes.forEach(type => {
+                    if (!this.edgeTypeColors.has(type)) {
+                        this.edgeTypeColors.set(type, this.generateLightTransparentColor(0.6));
+                    }
+                });
+            }
+            
+            generateLightTransparentColor(alpha = 0.7) {
+                // Use golden angle for optimal color distribution
+                const hue = (this.colorSeed * 137.508) % 360;
+                
+                // Ensure good saturation and lightness for readability
+                const saturation = 50 + (this.colorSeed * 19) % 25; // 50-75% saturation
+                const lightness = 65 + (this.colorSeed * 13) % 20; // 65-85% lightness
+                
+                this.colorSeed++;
+                
+                // Convert HSL to RGB
+                const rgb = this.hslToRgb(hue / 360, saturation / 100, lightness / 100);
+                return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+            }
+            
+            hslToRgb(h, s, l) {
+                let r, g, b;
+                
+                if (s === 0) {
+                    r = g = b = l; // achromatic
+                } else {
+                    const hue2rgb = (p, q, t) => {
+                        if (t < 0) t += 1;
+                        if (t > 1) t -= 1;
+                        if (t < 1/6) return p + (q - p) * 6 * t;
+                        if (t < 1/2) return q;
+                        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                        return p;
+                    };
+                    
+                    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                    const p = 2 * l - q;
+                    r = hue2rgb(p, q, h + 1/3);
+                    g = hue2rgb(p, q, h);
+                    b = hue2rgb(p, q, h - 1/3);
+                }
+                
+                return {
+                    r: Math.round(r * 255),
+                    g: Math.round(g * 255),
+                    b: Math.round(b * 255)
+                };
+            }
+            
+            getNodeColor(type) {
+                if (!type) type = 'default';
+                
+                if (!this.nodeTypeColors.has(type)) {
+                    this.nodeTypeColors.set(type, this.generateLightTransparentColor(0.7));
+                    this.discoveredNodeTypes.add(type);
+                    this.updateLegend();
+                }
+                
+                return this.nodeTypeColors.get(type);
+            }
+            
+            getEdgeColor(type) {
+                if (!type) type = 'default';
+                
+                if (!this.edgeTypeColors.has(type)) {
+                    this.edgeTypeColors.set(type, this.generateLightTransparentColor(0.6));
+                    this.discoveredEdgeTypes.add(type);
+                    this.updateLegend();
+                }
+                
+                return this.edgeTypeColors.get(type);
+            }
+            
+            // Method to force legend refresh - useful for external calls
+            refreshLegend() {
+                this.updateLegend();
+            }
+            
+            // Validate that legend meets all requirements
+            validateLegendRequirements() {
+                const legendContent = document.getElementById('legend-content');
+                const results = {
+                    requirement_5_1: !!legendContent, // Legend card exists
+                    requirement_5_2: this.discoveredNodeTypes.size > 0, // Node types shown
+                    requirement_5_3: this.discoveredEdgeTypes.size > 0, // Edge types shown
+                    requirement_5_4: legendContent.innerHTML.includes('Anchor Nodes'), // Anchor indication
+                    proper_spacing: legendContent.querySelectorAll('.legend-section').length > 0,
+                    color_mapping: this.nodeTypeColors.size > 0 || this.edgeTypeColors.size > 0
+                };
+                
+                console.log('Legend Requirements Validation:', results);
+                return results;
+            }
+            
+            updateLegend() {
+                const legendContent = document.getElementById('legend-content');
+                if (!legendContent) return;
+                
+                // Clear existing content
+                legendContent.innerHTML = '';
+                
+                // Create legend sections with proper spacing and readability
+                this.createNodeTypesLegend(legendContent);
+                this.createEdgeTypesLegend(legendContent);
+                this.createAnchorNodesLegend(legendContent);
+            }
+            
+            createNodeTypesLegend(legendContent) {
+                if (this.discoveredNodeTypes.size === 0) return;
+                
+                const nodeSection = document.createElement('div');
+                nodeSection.className = 'legend-section';
+                
+                const header = document.createElement('h4');
+                header.textContent = 'Node Types';
+                nodeSection.appendChild(header);
+                
+                // Sort node types alphabetically for consistent display
+                const sortedNodeTypes = Array.from(this.discoveredNodeTypes).sort();
+                
+                sortedNodeTypes.forEach(type => {
+                    const color = this.nodeTypeColors.get(type);
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+                    
+                    const colorBox = document.createElement('div');
+                    colorBox.className = 'legend-color';
+                    colorBox.style.backgroundColor = color;
+                    
+                    const label = document.createElement('span');
+                    label.textContent = type;
+                    
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    nodeSection.appendChild(item);
+                });
+                
+                legendContent.appendChild(nodeSection);
+            }
+            
+            createEdgeTypesLegend(legendContent) {
+                if (this.discoveredEdgeTypes.size === 0) return;
+                
+                const edgeSection = document.createElement('div');
+                edgeSection.className = 'legend-section';
+                
+                const header = document.createElement('h4');
+                header.textContent = 'Edge Types';
+                edgeSection.appendChild(header);
+                
+                // Sort edge types alphabetically for consistent display
+                const sortedEdgeTypes = Array.from(this.discoveredEdgeTypes).sort();
+                
+                sortedEdgeTypes.forEach(type => {
+                    const color = this.edgeTypeColors.get(type);
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+                    
+                    const colorBox = document.createElement('div');
+                    colorBox.className = 'legend-color';
+                    colorBox.style.backgroundColor = color;
+                    
+                    const label = document.createElement('span');
+                    label.textContent = type;
+                    
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    edgeSection.appendChild(item);
+                });
+                
+                legendContent.appendChild(edgeSection);
+            }
+            
+            createAnchorNodesLegend(legendContent) {
+                // Always show anchor nodes section as per requirement 5.4
+                const anchorSection = document.createElement('div');
+                anchorSection.className = 'legend-section';
+                
+                const header = document.createElement('h4');
+                header.textContent = 'Special Nodes';
+                anchorSection.appendChild(header);
+                
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-shape';
+                colorBox.style.backgroundColor = 'rgba(239, 68, 68, 0.8)';
+                colorBox.style.borderRadius = '2px'; // Make it more square-like
+                
+                const label = document.createElement('span');
+                label.textContent = 'Anchor Nodes';
+                
+                item.appendChild(colorBox);
+                item.appendChild(label);
+                anchorSection.appendChild(item);
+                
+                legendContent.appendChild(anchorSection);
+            }
+            
+            getTypeStatistics() {
+                return {
+                    nodeTypes: Array.from(this.discoveredNodeTypes),
+                    edgeTypes: Array.from(this.discoveredEdgeTypes),
+                    nodeTypeCount: this.discoveredNodeTypes.size,
+                    edgeTypeCount: this.discoveredEdgeTypes.size
+                };
+            }
+        }
+
+        // Graph Layout System
+        class GraphLayoutEngine {
+            constructor() {
+                this.minDistance = 360; // Minimum distance between nodes
+                this.iterations = 100; // Layout algorithm iterations
+                this.repulsionStrength = 1000;
+                this.attractionStrength = 0.1;
+                this.damping = 0.9;
+            }
+            
+            applyForceDirectedLayout(nodes, edges) {
+                // Create node lookup
+                const nodeMap = {};
+                nodes.forEach(node => {
+                    nodeMap[node.id] = node;
+                    // Initialize velocity if not present
+                    if (!node.vx) node.vx = 0;
+                    if (!node.vy) node.vy = 0;
+                });
+                
+                // Apply force-directed layout algorithm
+                for (let iter = 0; iter < this.iterations; iter++) {
+                    // Reset forces
+                    nodes.forEach(node => {
+                        node.fx = 0;
+                        node.fy = 0;
+                    });
+                    
+                    // Apply repulsion forces between all nodes
+                    for (let i = 0; i < nodes.length; i++) {
+                        for (let j = i + 1; j < nodes.length; j++) {
+                            this.applyRepulsion(nodes[i], nodes[j]);
+                        }
+                    }
+                    
+                    // Apply attraction forces along edges
+                    edges.forEach(edge => {
+                        const source = nodeMap[edge.source];
+                        const target = nodeMap[edge.target];
+                        if (source && target) {
+                            this.applyAttraction(source, target);
+                        }
+                    });
+                    
+                    // Update positions
+                    nodes.forEach(node => {
+                        if (!node.anchor) { // Don't move anchor nodes
+                            node.vx = (node.vx + node.fx) * this.damping;
+                            node.vy = (node.vy + node.fy) * this.damping;
+                            node.x += node.vx;
+                            node.y += node.vy;
+                        }
+                    });
+                }
+                
+                // Clean up temporary properties
+                nodes.forEach(node => {
+                    delete node.fx;
+                    delete node.fy;
+                    delete node.vx;
+                    delete node.vy;
+                });
+            }
+            
+            applyRepulsion(node1, node2) {
+                const dx = node2.x - node1.x;
+                const dy = node2.y - node1.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0 && distance < this.minDistance * 3) {
+                    const force = this.repulsionStrength / (distance * distance);
+                    const fx = (dx / distance) * force;
+                    const fy = (dy / distance) * force;
+                    
+                    node1.fx -= fx;
+                    node1.fy -= fy;
+                    node2.fx += fx;
+                    node2.fy += fy;
+                }
+            }
+            
+            applyAttraction(source, target) {
+                const dx = target.x - source.x;
+                const dy = target.y - source.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > this.minDistance) {
+                    const force = this.attractionStrength * (distance - this.minDistance);
+                    const fx = (dx / distance) * force;
+                    const fy = (dy / distance) * force;
+                    
+                    source.fx += fx;
+                    source.fy += fy;
+                    target.fx -= fx;
+                    target.fy -= fy;
+                }
+            }
+            
+            generateInitialLayout(nodes, edges) {
+                // Generate initial positions if not provided
+                const radius = Math.max(100, nodes.length * 15);
+                
+                nodes.forEach((node, index) => {
+                    if (node.x === undefined || node.y === undefined) {
+                        if (node.anchor) {
+                            // Place anchor nodes at origin or specific positions
+                            node.x = 0;
+                            node.y = 0;
+                        } else {
+                            // Distribute other nodes in a circle
+                            const angle = (index * 2 * Math.PI) / nodes.length;
+                            node.x = Math.cos(angle) * radius;
+                            node.y = Math.sin(angle) * radius;
+                        }
+                    }
+                });
+                
+                // Apply force-directed layout to improve positioning
+                this.applyForceDirectedLayout(nodes, edges);
+            }
+        }
+        
+        // Canvas Navigation System
+        class CanvasNavigator {
+            constructor(canvas, ctx) {
+                this.canvas = canvas;
+                this.ctx = ctx;
+                
+                // Transform state
+                this.transform = { x: 0, y: 0, scale: 1 };
+                
+                // Animation state
+                this.animationId = null;
+                this.isAnimating = false;
+                
+                // Canvas interaction state
+                this.isDragging = false;
+                this.lastMouseX = 0;
+                this.lastMouseY = 0;
+                
+                // Node interaction state
+                this.isDraggingNode = false;
+                this.draggedNode = null;
+                this.hoveredNode = null;
+                this.selectedNode = null;
+                this.nodeZOrder = []; // Track node layering for overlapping
+                
+                // Context menu and isolation state
+                this.contextMenuNode = null;
+                this.isolatedNode = null;
+                this.contextMenu = document.getElementById('context-menu');
+                
+                // Configuration
+                this.minZoom = 0.1;
+                this.maxZoom = 5.0;
+                this.zoomStep = 0.2;
+                this.animationDuration = 300; // ms
+                this.nodeRadius = 35;
+                this.hoverRadius = 25; // Slightly larger for easier interaction
+                
+                this.setupEventListeners();
+                this.render();
+            }
+            
+            setupEventListeners() {
+                // Mouse events for canvas and node interaction
+                this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+                this.canvas.addEventListener('click', (e) => this.handleClick(e));
+                this.canvas.addEventListener('contextmenu', (e) => this.handleRightClick(e));
+                
+                // Wheel event for zoom
+                this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
+                
+                // Zoom control buttons
+                document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn());
+                document.getElementById('zoom-out').addEventListener('click', () => this.zoomOut());
+                document.getElementById('recenter').addEventListener('click', () => this.recenter());
+                
+                // Context menu event handlers
+                this.setupContextMenuHandlers();
+            }
+            
+            handleMouseDown(e) {
+                if (e.button === 0) { // Left mouse button
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    const worldPos = this.screenToWorld(mouseX, mouseY);
+                    
+                    // Check if clicking on a node
+                    const clickedNode = this.getNodeAtPosition(worldPos.x, worldPos.y);
+                    
+                    if (clickedNode) {
+                        // Start node dragging
+                        this.isDraggingNode = true;
+                        this.draggedNode = clickedNode;
+                        this.selectedNode = clickedNode;
+                        
+                        // Bring node to front in z-order
+                        this.bringNodeToFront(clickedNode);
+                        
+                        this.canvas.style.cursor = 'grabbing';
+                        this.render(); // Re-render to show selection
+                    } else {
+                        // Start canvas dragging
+                        this.isDragging = true;
+                        this.selectedNode = null; // Clear selection
+                        this.canvas.style.cursor = 'grabbing';
+                    }
+                    
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                }
+            }
+            
+            handleMouseMove(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const worldPos = this.screenToWorld(mouseX, mouseY);
+                
+                if (this.isDraggingNode && this.draggedNode) {
+                    // Update node position with smooth movement
+                    this.draggedNode.x = worldPos.x;
+                    this.draggedNode.y = worldPos.y;
+                    
+                    // Ensure dragged node stays on top
+                    this.bringNodeToFront(this.draggedNode);
+                    
+                    this.render(); // Re-render to show node movement and edge updates
+                } else if (this.isDragging) {
+                    // Canvas panning
+                    const deltaX = e.clientX - this.lastMouseX;
+                    const deltaY = e.clientY - this.lastMouseY;
+                    
+                    this.transform.x += deltaX;
+                    this.transform.y += deltaY;
+                    
+                    this.render();
+                } else {
+                    // Handle hover effects with smooth transitions
+                    const hoveredNode = this.getNodeAtPosition(worldPos.x, worldPos.y);
+                    
+                    if (hoveredNode !== this.hoveredNode) {
+                        this.hoveredNode = hoveredNode;
+                        
+                        // Update cursor based on hover state
+                        if (hoveredNode) {
+                            this.canvas.style.cursor = 'pointer';
+                        } else {
+                            this.canvas.style.cursor = 'grab';
+                        }
+                        
+                        this.render(); // Re-render to show hover effects
+                    }
+                }
+                
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+            }
+            
+            handleMouseUp(e) {
+                if (this.isDraggingNode) {
+                    this.isDraggingNode = false;
+                    this.draggedNode = null;
+                    
+                    // Update cursor based on current hover state
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    const worldPos = this.screenToWorld(mouseX, mouseY);
+                    const hoveredNode = this.getNodeAtPosition(worldPos.x, worldPos.y);
+                    
+                    this.canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
+                } else if (this.isDragging) {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'grab';
+                }
+            }
+            
+            handleClick(e) {
+                // Handle node focus for overlapping nodes
+                if (!this.isDraggingNode && !this.isDragging) {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    const worldPos = this.screenToWorld(mouseX, mouseY);
+                    
+                    const clickedNode = this.getNodeAtPosition(worldPos.x, worldPos.y);
+                    
+                    if (clickedNode) {
+                        // If clicking on a node that's underneath another, bring it to front
+                        this.selectedNode = clickedNode;
+                        this.bringNodeToFront(clickedNode);
+                        this.render();
+                    }
+                }
+                
+                // Hide context menu on any click
+                this.hideContextMenu();
+            }
+            
+            handleRightClick(e) {
+                e.preventDefault();
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const worldPos = this.screenToWorld(mouseX, mouseY);
+                
+                const clickedNode = this.getNodeAtPosition(worldPos.x, worldPos.y);
+                
+                if (clickedNode) {
+                    // Show context menu for the clicked node
+                    this.showContextMenu(e.clientX, e.clientY, clickedNode);
+                } else {
+                    // Hide context menu if right-clicking on empty space
+                    this.hideContextMenu();
+                }
+            }
+            
+            setupContextMenuHandlers() {
+                // Isolate node functionality
+                document.getElementById('isolate-node').addEventListener('click', () => {
+                    if (this.contextMenuNode) {
+                        this.isolateNode(this.contextMenuNode);
+                        this.hideContextMenu();
+                    }
+                });
+                
+                // Copy label functionality
+                document.getElementById('copy-label').addEventListener('click', () => {
+                    if (this.contextMenuNode) {
+                        this.copyNodeLabel(this.contextMenuNode);
+                        this.hideContextMenu();
+                    }
+                });
+                
+                // Cancel isolation functionality
+                document.getElementById('cancel-isolate').addEventListener('click', () => {
+                    this.cancelIsolation();
+                    this.hideContextMenu();
+                });
+                
+                // Hide context menu when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!this.contextMenu.contains(e.target)) {
+                        this.hideContextMenu();
+                    }
+                });
+            }
+            
+            showContextMenu(x, y, node) {
+                this.contextMenuNode = node;
+                
+                // Update context menu items based on current state
+                const isolateItem = document.getElementById('isolate-node');
+                const cancelIsolateItem = document.getElementById('cancel-isolate');
+                
+                if (this.isolatedNode === node) {
+                    // If this node is already isolated, show cancel option
+                    isolateItem.style.display = 'none';
+                    cancelIsolateItem.style.display = 'block';
+                } else {
+                    // Show isolate option
+                    isolateItem.style.display = 'block';
+                    cancelIsolateItem.style.display = 'none';
+                }
+                
+                // Position context menu
+                this.contextMenu.style.left = x + 'px';
+                this.contextMenu.style.top = y + 'px';
+                this.contextMenu.classList.remove('hidden');
+                
+                // Ensure context menu stays within viewport
+                const rect = this.contextMenu.getBoundingClientRect();
+                if (rect.right > window.innerWidth) {
+                    this.contextMenu.style.left = (x - rect.width) + 'px';
+                }
+                if (rect.bottom > window.innerHeight) {
+                    this.contextMenu.style.top = (y - rect.height) + 'px';
+                }
+            }
+            
+            hideContextMenu() {
+                this.contextMenu.classList.add('hidden');
+                this.contextMenuNode = null;
+            }
+            
+            isolateNode(node) {
+                this.isolatedNode = node;
+                console.log(`Isolated node: ${node.label || node.id}`);
+                this.render(); // Re-render to apply isolation effects
+            }
+            
+            cancelIsolation() {
+                this.isolatedNode = null;
+                console.log('Isolation cancelled');
+                this.render(); // Re-render to remove isolation effects
+            }
+            
+            copyNodeLabel(node) {
+                // Copy only the label (or id) of the specific node
+                const label = node.label || node.id;
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(label).then(() => {
+                        console.log('Node label copied to clipboard');
+                        this.showCopyFeedback();
+                    }).catch(err => {
+                        console.error('Failed to copy to clipboard:', err);
+                        this.fallbackCopyToClipboard(label);
+                    });
+                } else {
+                    this.fallbackCopyToClipboard(label);
+                }
+            }
+            
+            fallbackCopyToClipboard(text) {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    console.log('All node labels copied to clipboard (fallback)');
+                    this.showCopyFeedback();
+                } catch (err) {
+                    console.error('Fallback copy failed:', err);
+                    alert('Copy to clipboard failed. Please copy manually.');
+                }
+                
+                document.body.removeChild(textArea);
+            }
+            
+            showCopyFeedback() {
+                // Create temporary feedback element
+                const feedback = document.createElement('div');
+                feedback.textContent = 'Labels copied to clipboard!';
+                feedback.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: var(--card-bg);
+                    border: 1px solid var(--card-border);
+                    border-radius: 6px;
+                    padding: 12px 20px;
+                    box-shadow: var(--card-shadow);
+                    z-index: 3000;
+                    font-size: 14px;
+                    color: var(--text-primary);
+                    backdrop-filter: blur(10px);
+                `;
+                
+                document.body.appendChild(feedback);
+                
+                // Remove feedback after 2 seconds
+                setTimeout(() => {
+                    if (feedback.parentNode) {
+                        document.body.removeChild(feedback);
+                    }
+                }, 2000);
+            }
+            
+            getTestNodes() {
+                // Return test nodes for fallback
+                return [
+                    {id: 'origin', label: 'Origin'},
+                    {id: 'processor', label: 'Processor'},
+                    {id: 'database', label: 'Database'},
+                    {id: 'api', label: 'API Gateway'},
+                    {id: 'cache', label: 'Cache'},
+                    {id: 'monitor', label: 'Monitor'},
+                    {id: 'queue', label: 'Message Queue'},
+                    {id: 'auth', label: 'Auth Service'}
+                ];
+            }
+            
+            isNodeConnectedToIsolated(node) {
+                if (!this.isolatedNode) return false;
+                
+                const edges = GRAPH_DATA && GRAPH_DATA.edges ? GRAPH_DATA.edges : this.getTestEdges();
+                
+                // Check if this node is directly connected to the isolated node
+                return edges.some(edge => 
+                    (edge.source === this.isolatedNode.id && edge.target === node.id) ||
+                    (edge.target === this.isolatedNode.id && edge.source === node.id)
+                );
+            }
+            
+            isEdgeConnectedToIsolated(edge) {
+                if (!this.isolatedNode) return false;
+                
+                // Check if this edge is directly connected to the isolated node
+                return edge.source === this.isolatedNode.id || edge.target === this.isolatedNode.id;
+            }
+            
+            getTestEdges() {
+                // Return test edges for fallback
+                return [
+                    {source: 'origin', target: 'processor'},
+                    {source: 'origin', target: 'database'},
+                    {source: 'processor', target: 'api'},
+                    {source: 'database', target: 'cache'},
+                    {source: 'api', target: 'monitor'},
+                    {source: 'cache', target: 'queue'},
+                    {source: 'monitor', target: 'queue'},
+                    {source: 'api', target: 'auth'}
+                ];
+            }
+            
+            handleWheel(e) {
+                e.preventDefault();
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                // Determine zoom direction
+                const zoomDirection = e.deltaY > 0 ? -1 : 1;
+                const zoomFactor = 1 + (this.zoomStep * zoomDirection);
+                
+                this.zoomAtPoint(mouseX, mouseY, zoomFactor);
+            }
+            
+            zoomIn() {
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const zoomFactor = 1 + this.zoomStep;
+                
+                this.animateZoomAtPoint(centerX, centerY, zoomFactor);
+            }
+            
+            zoomOut() {
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const zoomFactor = 1 - this.zoomStep;
+                
+                this.animateZoomAtPoint(centerX, centerY, zoomFactor);
+            }
+            
+            zoomAtPoint(mouseX, mouseY, zoomFactor) {
+                const newScale = Math.max(this.minZoom, Math.min(this.maxZoom, this.transform.scale * zoomFactor));
+                
+                if (newScale !== this.transform.scale) {
+                    // Calculate zoom point in world coordinates
+                    const worldX = (mouseX - this.transform.x) / this.transform.scale;
+                    const worldY = (mouseY - this.transform.y) / this.transform.scale;
+                    
+                    // Update scale
+                    this.transform.scale = newScale;
+                    
+                    // Adjust position to keep zoom point fixed
+                    this.transform.x = mouseX - worldX * this.transform.scale;
+                    this.transform.y = mouseY - worldY * this.transform.scale;
+                    
+                    this.render();
+                }
+            }
+            
+            animateZoomAtPoint(mouseX, mouseY, zoomFactor) {
+                const targetScale = Math.max(this.minZoom, Math.min(this.maxZoom, this.transform.scale * zoomFactor));
+                
+                if (targetScale === this.transform.scale) return;
+                
+                // Calculate target transform
+                const worldX = (mouseX - this.transform.x) / this.transform.scale;
+                const worldY = (mouseY - this.transform.y) / this.transform.scale;
+                const targetX = mouseX - worldX * targetScale;
+                const targetY = mouseY - worldY * targetScale;
+                
+                this.animateTransform(targetX, targetY, targetScale);
+            }
+            
+            recenter() {
+                // Animate back to center position with scale 1
+                this.animateTransform(0, 0, 1);
+            }
+            
+            animateTransform(targetX, targetY, targetScale) {
+                if (this.isAnimating) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                
+                const startTime = performance.now();
+                const startX = this.transform.x;
+                const startY = this.transform.y;
+                const startScale = this.transform.scale;
+                
+                const deltaX = targetX - startX;
+                const deltaY = targetY - startY;
+                const deltaScale = targetScale - startScale;
+                
+                this.isAnimating = true;
+                
+                const animate = (currentTime) => {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / this.animationDuration, 1);
+                    
+                    // Easing function (ease-out)
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    
+                    this.transform.x = startX + deltaX * easeOut;
+                    this.transform.y = startY + deltaY * easeOut;
+                    this.transform.scale = startScale + deltaScale * easeOut;
+                    
+                    this.render();
+                    
+                    if (progress < 1) {
+                        this.animationId = requestAnimationFrame(animate);
+                    } else {
+                        this.isAnimating = false;
+                    }
+                };
+                
+                this.animationId = requestAnimationFrame(animate);
+            }
+            
+            applyTransform() {
+                this.ctx.setTransform(
+                    this.transform.scale, 0, 0, this.transform.scale,
+                    this.transform.x, this.transform.y
+                );
+            }
+            
+            resetTransform() {
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+            
+            render() {
+                // Clear canvas
+                this.resetTransform();
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Apply transform for graph content
+                this.applyTransform();
+                
+                // Draw graph content (will be implemented in later tasks)
+                this.drawGraph();
+                
+                // Reset transform for UI elements
+                this.resetTransform();
+            }
+            
+
+            
+            drawGraph() {
+                // Draw aesthetic grid background that transforms with canvas navigation
+                this.drawGrid();
+                
+                // Draw graph content using the graph rendering engine
+                if (GRAPH_DATA && GRAPH_DATA.nodes && GRAPH_DATA.edges) {
+                    this.drawEdges(GRAPH_DATA.edges, GRAPH_DATA.nodes);
+                    this.drawNodes(GRAPH_DATA.nodes);
+                    
+                    // Draw labels if enabled
+                    if (window.labelsEnabled) {
+                        this.drawNodeLabels(GRAPH_DATA.nodes);
+                        this.drawEdgeLabels(GRAPH_DATA.edges, GRAPH_DATA.nodes);
+                    }
+                } else {
+                    // Fallback: draw test nodes if no graph data is available
+                    this.drawTestGraph();
+                }
+            }
+            
+            drawTestGraph() {
+                // Enhanced test graph with diverse types and custom metadata
+                const testNodes = [
+                    {
+                        id: 'origin', 
+                        x: 0, y: 0, 
+                        type: 'anchor', 
+                        label: 'Origin', 
+                        anchor: true,
+                        metadata: {
+                            importance: 'high',
+                            category: 'root',
+                            created: '2024-01-01'
+                        }
+                    },
+                    {
+                        id: 'processor', 
+                        x: 120, y: 60, 
+                        type: 'computation', 
+                        label: 'Processor', 
+                        anchor: false,
+                        metadata: {
+                            cpu_usage: '75%',
+                            memory: '2GB',
+                            status: 'active'
+                        }
+                    },
+                    {
+                        id: 'database', 
+                        x: -90, y: 140, 
+                        type: 'storage', 
+                        label: 'Database', 
+                        anchor: false,
+                        metadata: {
+                            size: '500MB',
+                            connections: 12,
+                            type: 'postgresql'
+                        }
+                    },
+                    {
+                        id: 'api', 
+                        x: 180, y: -120, 
+                        type: 'service', 
+                        label: 'API Gateway', 
+                        anchor: false,
+                        metadata: {
+                            requests_per_sec: 150,
+                            uptime: '99.9%',
+                            version: '2.1.0'
+                        }
+                    },
+                    {
+                        id: 'cache', 
+                        x: -140, y: -90, 
+                        type: 'storage', 
+                        label: 'Cache', 
+                        anchor: false,
+                        metadata: {
+                            hit_rate: '85%',
+                            size: '128MB',
+                            ttl: '3600s'
+                        }
+                    },
+                    {
+                        id: 'monitor', 
+                        x: 60, y: -180, 
+                        type: 'analytics', 
+                        label: 'Monitor', 
+                        anchor: false,
+                        metadata: {
+                            alerts: 3,
+                            metrics: 45,
+                            status: 'healthy'
+                        }
+                    },
+                    {
+                        id: 'queue', 
+                        x: -60, y: 180, 
+                        type: 'messaging', 
+                        label: 'Message Queue', 
+                        anchor: false,
+                        metadata: {
+                            messages: 1250,
+                            consumers: 5,
+                            lag: '2ms'
+                        }
+                    },
+                    {
+                        id: 'auth', 
+                        x: 200, y: 80, 
+                        type: 'security', 
+                        label: 'Auth Service', 
+                        anchor: false,
+                        metadata: {
+                            active_sessions: 89,
+                            token_expiry: '24h',
+                            mfa_enabled: true
+                        }
+                    }
+                ];
+                
+                const testEdges = [
+                    {
+                        source: 'origin', 
+                        target: 'processor', 
+                        type: 'data_flow', 
+                        directed: true, 
+                        label: 'processes',
+                        metadata: {
+                            bandwidth: '100Mbps',
+                            latency: '5ms',
+                            protocol: 'TCP'
+                        }
+                    },
+                    {
+                        source: 'origin', 
+                        target: 'database', 
+                        type: 'query', 
+                        directed: true, 
+                        label: 'queries',
+                        metadata: {
+                            query_type: 'SELECT',
+                            frequency: '50/sec',
+                            avg_time: '12ms'
+                        }
+                    },
+                    {
+                        source: 'processor', 
+                        target: 'api', 
+                        type: 'http_request', 
+                        directed: false, 
+                        label: 'communicates',
+                        metadata: {
+                            method: 'POST',
+                            content_type: 'application/json',
+                            auth_required: true
+                        }
+                    },
+                    {
+                        source: 'database', 
+                        target: 'cache', 
+                        type: 'cache_sync', 
+                        directed: true,
+                        metadata: {
+                            sync_interval: '30s',
+                            compression: 'gzip',
+                            encryption: true
+                        }
+                    },
+                    {
+                        source: 'api', 
+                        target: 'monitor', 
+                        type: 'telemetry', 
+                        directed: true, 
+                        label: 'reports',
+                        metadata: {
+                            metrics_format: 'prometheus',
+                            interval: '10s',
+                            retention: '30d'
+                        }
+                    },
+                    {
+                        source: 'cache', 
+                        target: 'queue', 
+                        type: 'event_stream', 
+                        directed: false,
+                        metadata: {
+                            event_type: 'cache_invalidation',
+                            format: 'json',
+                            reliability: 'at_least_once'
+                        }
+                    },
+                    {
+                        source: 'monitor', 
+                        target: 'queue', 
+                        type: 'alert', 
+                        directed: true,
+                        label: 'alerts',
+                        metadata: {
+                            severity: 'warning',
+                            channel: 'slack',
+                            escalation: '5min'
+                        }
+                    },
+                    {
+                        source: 'api', 
+                        target: 'auth', 
+                        type: 'authentication', 
+                        directed: true,
+                        label: 'validates',
+                        metadata: {
+                            method: 'JWT',
+                            algorithm: 'RS256',
+                            refresh_token: true
+                        }
+                    }
+                ];
+                
+                // Discover types and generate colors
+                if (window.styleManager) {
+                    window.styleManager.discoverTypes(testNodes, testEdges);
+                }
+                
+                // Apply layout algorithm to test nodes
+                if (window.layoutEngine) {
+                    window.layoutEngine.generateInitialLayout(testNodes, testEdges);
+                }
+                
+                this.drawEdges(testEdges, testNodes);
+                this.drawNodes(testNodes);
+                
+                if (window.labelsEnabled) {
+                    this.drawNodeLabels(testNodes);
+                    this.drawEdgeLabels(testEdges, testNodes);
+                }
+            }
+            
+            drawNodes(nodes) {
+                const ctx = this.ctx;
+                const nodeRadius = 35;
+                const baseLineWidth = 2 / this.transform.scale;
+                
+                // Draw nodes in z-order (bottom to top)
+                const orderedNodes = this.getNodesInZOrder(nodes);
+                
+                orderedNodes.forEach(node => {
+                    let nodeColor = this.getNodeColor(node);
+                    let borderColor = this.getNodeBorderColor(node);
+                    let lineWidth = baseLineWidth;
+                    let radius = nodeRadius;
+                    let size = nodeRadius * 1.2;
+                    
+                    // Apply isolation effects
+                    const isIsolated = this.isolatedNode !== null;
+                    const isIsolatedNode = this.isolatedNode && this.isolatedNode.id === node.id;
+                    const isConnectedToIsolated = isIsolated && !isIsolatedNode && this.isNodeConnectedToIsolated(node);
+                    
+                    if (isIsolated && !isIsolatedNode && !isConnectedToIsolated) {
+                        // Apply blur and opacity reduction to non-connected nodes
+                        ctx.filter = 'blur(2px)';
+                        nodeColor = nodeColor.replace(/[\d\.]+\)$/, '0.3)'); // Reduce opacity
+                        borderColor = borderColor.replace(/[\d\.]+\)$/, '0.3)');
+                    } else {
+                        ctx.filter = 'none';
+                    }
+                    
+                    // Apply visual feedback for interaction states
+                    const isHovered = this.hoveredNode && this.hoveredNode.id === node.id;
+                    const isSelected = this.selectedNode && this.selectedNode.id === node.id;
+                    const isDragged = this.draggedNode && this.draggedNode.id === node.id;
+                    
+                    // Enhance visual feedback for different states
+                    if (isDragged) {
+                        // Dragged node: larger, brighter border, slight glow effect
+                        lineWidth = baseLineWidth * 2;
+                        borderColor = 'rgba(59, 130, 246, 0.8)';
+                        radius = nodeRadius * 1.1;
+                        size = nodeRadius * 1.3;
+                        
+                        // Add glow effect
+                        ctx.shadowColor = 'rgba(59, 130, 246, 0.4)';
+                        ctx.shadowBlur = 10 / this.transform.scale;
+                    } else if (isSelected) {
+                        // Selected node: thicker border, slightly larger
+                        lineWidth = baseLineWidth * 1.5;
+                        borderColor = 'rgba(59, 130, 246, 0.6)';
+                        radius = nodeRadius * 1.05;
+                        size = nodeRadius * 1.25;
+                    } else if (isHovered) {
+                        // Hovered node: subtle highlight
+                        lineWidth = baseLineWidth * 1.2;
+                        borderColor = 'rgba(59, 130, 246, 0.4)';
+                        radius = nodeRadius * 1.02;
+                        size = nodeRadius * 1.22;
+                    }
+                    
+                    ctx.lineWidth = lineWidth;
+                    ctx.fillStyle = nodeColor;
+                    ctx.strokeStyle = borderColor;
+                    
+                    if (node.anchor) {
+                        // Draw anchor nodes as red squares
+                        ctx.fillRect(node.x - size, node.y - size, size * 2, size * 2);
+                        ctx.strokeRect(node.x - size, node.y - size, size * 2, size * 2);
+                    } else {
+                        // Draw regular nodes as circles
+                        ctx.beginPath();
+                        ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                    
+                    // Reset shadow effects and filters
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.filter = 'none';
+                });
+            }
+            
+            drawEdges(edges, nodes) {
+                const ctx = this.ctx;
+                const baseLineWidth = 3 / this.transform.scale;
+                const arrowSize = 8 / this.transform.scale;
+                
+                // Create node lookup for position data
+                const nodeMap = {};
+                nodes.forEach(node => {
+                    nodeMap[node.id] = node;
+                });
+                
+                edges.forEach(edge => {
+                    const sourceNode = nodeMap[edge.source];
+                    const targetNode = nodeMap[edge.target];
+                    
+                    if (!sourceNode || !targetNode) return;
+                    
+                    let edgeColor = this.getEdgeColor(edge);
+                    let lineWidth = baseLineWidth;
+                    
+                    // Apply isolation effects
+                    const isIsolated = this.isolatedNode !== null;
+                    const isConnectedToIsolated = isIsolated && this.isEdgeConnectedToIsolated(edge);
+                    
+                    if (isIsolated && !isConnectedToIsolated) {
+                        // Apply blur and opacity reduction to non-connected edges
+                        ctx.filter = 'blur(2px)';
+                        edgeColor = edgeColor.replace(/[\d\.]+\)$/, '0.2)'); // Reduce opacity more than nodes
+                    } else {
+                        ctx.filter = 'none';
+                    }
+                    
+                    // Enhance edges connected to dragged or selected nodes
+                    const isSourceDragged = this.draggedNode && this.draggedNode.id === sourceNode.id;
+                    const isTargetDragged = this.draggedNode && this.draggedNode.id === targetNode.id;
+                    const isSourceSelected = this.selectedNode && this.selectedNode.id === sourceNode.id;
+                    const isTargetSelected = this.selectedNode && this.selectedNode.id === targetNode.id;
+                    
+                    if (isSourceDragged || isTargetDragged) {
+                        // Edges connected to dragged nodes: thicker, more prominent
+                        lineWidth = baseLineWidth * 1.5;
+                        edgeColor = edgeColor.replace(/[\d\.]+\)$/, '0.8)'); // Increase opacity
+                    } else if (isSourceSelected || isTargetSelected) {
+                        // Edges connected to selected nodes: slightly enhanced
+                        lineWidth = baseLineWidth * 1.2;
+                        edgeColor = edgeColor.replace(/[\d\.]+\)$/, '0.7)'); // Slightly increase opacity
+                    }
+                    
+                    ctx.strokeStyle = edgeColor;
+                    ctx.fillStyle = edgeColor;
+                    ctx.lineWidth = lineWidth;
+                    
+                    // Calculate edge endpoints (accounting for node radius and current visual state)
+                    const getNodeRadius = (node) => {
+                        const base = this.nodeRadius || 35;
+                        if (this.draggedNode && this.draggedNode.id === node.id) return node.anchor ? base * 1.3 : base * 1.1;
+                        if (this.selectedNode && this.selectedNode.id === node.id) return node.anchor ? base * 1.25 : base * 1.05;
+                        if (this.hoveredNode && this.hoveredNode.id === node.id) return node.anchor ? base * 1.22 : base * 1.02;
+                        return node.anchor ? base * 1.2 : base;
+                    };
+                    const baseNodeRadius = getNodeRadius(sourceNode);
+                    const dx = targetNode.x - sourceNode.x;
+                    const dy = targetNode.y - sourceNode.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance === 0) return;
+                    
+                    const unitX = dx / distance;
+                    const unitY = dy / distance;
+                    
+                    // Adjust for node boundaries, accounting for visual feedback scaling
+                    let sourceRadius = sourceNode.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
+                    let targetRadius = targetNode.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
+                    
+                    // Account for visual scaling of nodes during interaction
+                    if (this.draggedNode && this.draggedNode.id === sourceNode.id) {
+                        sourceRadius = sourceNode.anchor ? baseNodeRadius * 1.3 : baseNodeRadius * 1.1;
+                    } else if (this.selectedNode && this.selectedNode.id === sourceNode.id) {
+                        sourceRadius = sourceNode.anchor ? baseNodeRadius * 1.25 : baseNodeRadius * 1.05;
+                    } else if (this.hoveredNode && this.hoveredNode.id === sourceNode.id) {
+                        sourceRadius = sourceNode.anchor ? baseNodeRadius * 1.22 : baseNodeRadius * 1.02;
+                    }
+                    
+                    if (this.draggedNode && this.draggedNode.id === targetNode.id) {
+                        targetRadius = targetNode.anchor ? baseNodeRadius * 1.3 : baseNodeRadius * 1.1;
+                    } else if (this.selectedNode && this.selectedNode.id === targetNode.id) {
+                        targetRadius = targetNode.anchor ? baseNodeRadius * 1.25 : baseNodeRadius * 1.05;
+                    } else if (this.hoveredNode && this.hoveredNode.id === targetNode.id) {
+                        targetRadius = targetNode.anchor ? baseNodeRadius * 1.22 : baseNodeRadius * 1.02;
+                    }
+                    
+                    const startX = sourceNode.x + unitX * sourceRadius;
+                    const startY = sourceNode.y + unitY * sourceRadius;
+                    const endX = targetNode.x - unitX * targetRadius;
+                    const endY = targetNode.y - unitY * targetRadius;
+                    
+                    // Draw edge line with smooth extension/contraction
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                    
+                    // Draw arrow for directed edges
+                    if (edge.directed) {
+                        this.drawArrow(ctx, endX, endY, unitX, unitY, arrowSize);
+                    }
+                    
+                    // Reset filter effects
+                    ctx.filter = 'none';
+                });
+            }
+            
+            drawArrow(ctx, x, y, dirX, dirY, size) {
+                // Calculate arrow points
+                const arrowAngle = Math.PI / 6; // 30 degrees
+                const arrowX1 = x - size * (dirX * Math.cos(arrowAngle) - dirY * Math.sin(arrowAngle));
+                const arrowY1 = y - size * (dirY * Math.cos(arrowAngle) + dirX * Math.sin(arrowAngle));
+                const arrowX2 = x - size * (dirX * Math.cos(-arrowAngle) - dirY * Math.sin(-arrowAngle));
+                const arrowY2 = y - size * (dirY * Math.cos(-arrowAngle) + dirX * Math.sin(-arrowAngle));
+                
+                // Draw arrow
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(arrowX1, arrowY1);
+                ctx.moveTo(x, y);
+                ctx.lineTo(arrowX2, arrowY2);
+                ctx.stroke();
+            }
+            
+            getNodeColor(node) {
+                if (node.anchor) {
+                    return 'rgba(239, 68, 68, 0.8)'; // Fixed red color for anchor nodes
+                }
+                
+                // Get or generate color for this node type
+                return window.styleManager.getNodeColor(node.label);
+            }
+            
+            getNodeBorderColor(node) {
+                return 'rgba(0, 0, 0, 0.3)';
+            }
+            
+            getEdgeColor(edge) {
+                // Get or generate color for this edge type
+                return window.styleManager.getEdgeColor(edge.type);
+            }
+            
+            drawNodeLabels(nodes) {
+                const ctx = this.ctx;
+                const fontSize = Math.max(10, 12 / this.transform.scale);
+                ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                nodes.forEach(node => {
+                    if (node.label) {
+                        // Apply isolation effects
+                        const isIsolated = this.isolatedNode !== null;
+                        const isIsolatedNode = this.isolatedNode && this.isolatedNode.id === node.id;
+                        const isConnectedToIsolated = isIsolated && !isIsolatedNode && this.isNodeConnectedToIsolated(node);
+                        
+                        let bgOpacity = 0.7;  // Reduced for better node color visibility
+                        let textOpacity = 0.95;
+                        let borderOpacity = 0.15;
+                        
+                        if (isIsolated && !isIsolatedNode && !isConnectedToIsolated) {
+                            // Apply blur and opacity reduction to non-connected labels
+                            ctx.filter = 'blur(1px)';
+                            bgOpacity = 0.3;
+                            textOpacity = 0.3;
+                            borderOpacity = 0.1;
+                        } else {
+                            ctx.filter = 'none';
+                        }
+                        
+                        // Handle horizontal overflow for long labels
+                        const maxLabelWidth = 120 / this.transform.scale; // Maximum label width in world coordinates
+                        let displayLabel = node.label;
+                        let textMetrics = ctx.measureText(displayLabel);
+                        
+                        // Truncate label if it's too long and add ellipsis
+                        if (textMetrics.width > maxLabelWidth) {
+                            let truncatedLabel = displayLabel;
+                            while (truncatedLabel.length > 0 && ctx.measureText(truncatedLabel + '...').width > maxLabelWidth) {
+                                truncatedLabel = truncatedLabel.slice(0, -1);
+                            }
+                            displayLabel = truncatedLabel + '...';
+                            textMetrics = ctx.measureText(displayLabel);
+                        }
+                        
+                        const textWidth = textMetrics.width;
+                        const textHeight = fontSize;
+                        
+                        // Calculate label background dimensions with padding
+                        const padding = 3 / this.transform.scale;
+                        const bgWidth = textWidth + (padding * 2);
+                        const bgHeight = textHeight + (padding * 1.5);
+                        
+                        // Position label centered on node (requirement 6.6)
+                        const labelX = node.x;
+                        const labelY = node.y;
+                        
+                        // Calculate node radius for proper positioning
+                        const nodeRadius = node.anchor ? 30 : 35;
+                        
+                        // Ensure label background doesn't completely cover the node
+                        // Keep top and bottom edges of node visible (requirement 6.7)
+                        const maxBgHeight = Math.min(bgHeight, (nodeRadius * 2 * 0.6) / this.transform.scale);
+                        const adjustedBgHeight = Math.min(bgHeight, maxBgHeight);
+                        
+                        // Draw transparent rectangular background centered on node
+                        ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
+                        ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
+                        ctx.lineWidth = 0.5 / this.transform.scale;
+                        
+                        // Draw rounded rectangle for better aesthetics
+                        const cornerRadius = 2 / this.transform.scale;
+                        this.drawRoundedRect(
+                            ctx,
+                            labelX - bgWidth / 2,
+                            labelY - adjustedBgHeight / 2,
+                            bgWidth,
+                            adjustedBgHeight,
+                            cornerRadius
+                        );
+                        
+                        // Draw text centered on node
+                        ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
+                        ctx.fillText(displayLabel, labelX, labelY);
+                        
+                        // Reset filter effects
+                        ctx.filter = 'none';
+                    }
+                });
+            }
+            
+            // Helper method to draw rounded rectangles
+            drawRoundedRect(ctx, x, y, width, height, radius) {
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + width - radius, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                ctx.lineTo(x + width, y + height - radius);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                ctx.lineTo(x + radius, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+            
+            drawEdgeLabels(edges, nodes) {
+                const ctx = this.ctx;
+                const fontSize = Math.max(8, 10 / this.transform.scale);
+                ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Create node lookup for position data
+                const nodeMap = {};
+                nodes.forEach(node => {
+                    nodeMap[node.id] = node;
+                });
+                
+                edges.forEach(edge => {
+                    if (!edge.label) return;
+                    
+                    const sourceNode = nodeMap[edge.source];
+                    const targetNode = nodeMap[edge.target];
+                    
+                    if (!sourceNode || !targetNode) return;
+                    
+                    // Apply isolation effects
+                    const isIsolated = this.isolatedNode !== null;
+                    const isConnectedToIsolated = isIsolated && this.isEdgeConnectedToIsolated(edge);
+                    
+                    let bgOpacity = 0.9;
+                    let textOpacity = 0.7;
+                    let borderOpacity = 0.1;
+                    
+                    if (isIsolated && !isConnectedToIsolated) {
+                        // Apply blur and opacity reduction to non-connected edge labels
+                        ctx.filter = 'blur(1px)';
+                        bgOpacity = 0.3;
+                        textOpacity = 0.2;
+                        borderOpacity = 0.05;
+                    } else {
+                        ctx.filter = 'none';
+                    }
+                    
+                    // Calculate midpoint of edge
+                    const midX = (sourceNode.x + targetNode.x) / 2;
+                    const midY = (sourceNode.y + targetNode.y) / 2;
+                    
+                    // Measure text dimensions
+                    const textMetrics = ctx.measureText(edge.label);
+                    const textWidth = textMetrics.width;
+                    const textHeight = fontSize;
+                    
+                    // Calculate label background dimensions with padding
+                    const padding = 2 / this.transform.scale;
+                    const bgWidth = textWidth + (padding * 2);
+                    const bgHeight = textHeight + (padding * 2);
+                    
+                    // Draw transparent rectangular background
+                    ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
+                    ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
+                    ctx.lineWidth = 0.5 / this.transform.scale;
+                    
+                    ctx.fillRect(
+                        midX - bgWidth / 2,
+                        midY - bgHeight / 2,
+                        bgWidth,
+                        bgHeight
+                    );
+                    ctx.strokeRect(
+                        midX - bgWidth / 2,
+                        midY - bgHeight / 2,
+                        bgWidth,
+                        bgHeight
+                    );
+                    
+                    // Draw text
+                    ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
+                    ctx.fillText(edge.label, midX, midY);
+                    
+                    // Reset filter effects
+                    ctx.filter = 'none';
+                });
+            }
+            
+            drawGrid() {
+                const ctx = this.ctx;
+                const baseGridSize = 50; // Base grid spacing in world coordinates
+                const lineWidth = Math.max(0.5, 1 / this.transform.scale);
+                
+                // Calculate visible area in world coordinates
+                const topLeft = this.screenToWorld(0, 0);
+                const bottomRight = this.screenToWorld(this.canvas.width, this.canvas.height);
+                
+                // Adaptive grid opacity based on zoom level for better visibility
+                const zoomFactor = this.transform.scale;
+                const minorOpacity = Math.min(0.05, 0.02 + (zoomFactor * 0.01));
+                const majorOpacity = Math.min(0.12, 0.06 + (zoomFactor * 0.02));
+                
+                // Multi-level grid system for better visual hierarchy
+                this.drawGridLevel(ctx, baseGridSize, `rgba(0, 0, 0, ${minorOpacity})`, lineWidth * 0.5, topLeft, bottomRight);
+                this.drawGridLevel(ctx, baseGridSize * 5, `rgba(0, 0, 0, ${majorOpacity})`, lineWidth * 1.5, topLeft, bottomRight);
+                
+                // Draw origin axes with stronger lines and subtle gradient effect
+                this.drawOriginAxes(ctx, lineWidth, topLeft, bottomRight);
+                
+                // Add subtle dot pattern at grid intersections for major grid
+                this.drawGridDots(ctx, baseGridSize * 5, lineWidth, topLeft, bottomRight);
+            }
+            
+            drawGridLevel(ctx, gridSize, strokeStyle, lineWidth, topLeft, bottomRight) {
+                // Calculate grid bounds
+                const startX = Math.floor(topLeft.x / gridSize) * gridSize;
+                const endX = Math.ceil(bottomRight.x / gridSize) * gridSize;
+                const startY = Math.floor(topLeft.y / gridSize) * gridSize;
+                const endY = Math.ceil(bottomRight.y / gridSize) * gridSize;
+                
+                // Set grid style
+                ctx.strokeStyle = strokeStyle;
+                ctx.lineWidth = lineWidth;
+                ctx.setLineDash([]);
+                
+                // Draw vertical lines
+                for (let x = startX; x <= endX; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, startY);
+                    ctx.lineTo(x, endY);
+                    ctx.stroke();
+                }
+                
+                // Draw horizontal lines
+                for (let y = startY; y <= endY; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(startX, y);
+                    ctx.lineTo(endX, y);
+                    ctx.stroke();
+                }
+            }
+            
+            drawOriginAxes(ctx, lineWidth, topLeft, bottomRight) {
+                const startX = topLeft.x;
+                const endX = bottomRight.x;
+                const startY = topLeft.y;
+                const endY = bottomRight.y;
+                
+                // Enhanced origin axes with gradient-like effect
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
+                ctx.lineWidth = lineWidth * 3;
+                
+                // X-axis
+                if (startY <= 0 && endY >= 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(startX, 0);
+                    ctx.lineTo(endX, 0);
+                    ctx.stroke();
+                }
+                
+                // Y-axis
+                if (startX <= 0 && endX >= 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, startY);
+                    ctx.lineTo(0, endY);
+                    ctx.stroke();
+                }
+                
+                // Add subtle center point indicator
+                if (startX <= 0 && endX >= 0 && startY <= 0 && endY >= 0) {
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 4 / this.transform.scale, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            drawGridDots(ctx, gridSize, lineWidth, topLeft, bottomRight) {
+                // Only draw dots when zoomed in enough to see them clearly
+                if (this.transform.scale < 0.5) return;
+                
+                const startX = Math.floor(topLeft.x / gridSize) * gridSize;
+                const endX = Math.ceil(bottomRight.x / gridSize) * gridSize;
+                const startY = Math.floor(topLeft.y / gridSize) * gridSize;
+                const endY = Math.ceil(bottomRight.y / gridSize) * gridSize;
+                
+                const dotRadius = Math.max(0.5, 1.5 / this.transform.scale);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                
+                // Draw dots at major grid intersections
+                for (let x = startX; x <= endX; x += gridSize) {
+                    for (let y = startY; y <= endY; y += gridSize) {
+                        // Skip origin point (already drawn)
+                        if (x === 0 && y === 0) continue;
+                        
+                        ctx.beginPath();
+                        ctx.arc(x, y, dotRadius, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // Utility method to convert screen coordinates to world coordinates
+            screenToWorld(screenX, screenY) {
+                return {
+                    x: (screenX - this.transform.x) / this.transform.scale,
+                    y: (screenY - this.transform.y) / this.transform.scale
+                };
+            }
+            
+            // Utility method to convert world coordinates to screen coordinates
+            worldToScreen(worldX, worldY) {
+                return {
+                    x: worldX * this.transform.scale + this.transform.x,
+                    y: worldY * this.transform.scale + this.transform.y
+                };
+            }
+            
+            // Node interaction methods
+            getNodeAtPosition(worldX, worldY) {
+                // Get nodes from current graph data or test data
+                let nodes = [];
+                if (GRAPH_DATA && GRAPH_DATA.nodes && GRAPH_DATA.nodes.length > 0) {
+                    nodes = GRAPH_DATA.nodes;
+                } else {
+                    // Use test nodes if no graph data available
+                    nodes = [
+                        {
+                            id: 'origin', 
+                            x: 0, y: 0, 
+                            type: 'anchor', 
+                            label: 'Origin', 
+                            anchor: true
+                        },
+                        {
+                            id: 'processor', 
+                            x: 120, y: 60, 
+                            type: 'computation', 
+                            label: 'Processor', 
+                            anchor: false
+                        },
+                        {
+                            id: 'database', 
+                            x: -90, y: 140, 
+                            type: 'storage', 
+                            label: 'Database', 
+                            anchor: false
+                        },
+                        {
+                            id: 'api', 
+                            x: 180, y: -120, 
+                            type: 'service', 
+                            label: 'API Gateway', 
+                            anchor: false
+                        },
+                        {
+                            id: 'cache', 
+                            x: -140, y: -90, 
+                            type: 'storage', 
+                            label: 'Cache', 
+                            anchor: false
+                        },
+                        {
+                            id: 'monitor', 
+                            x: 60, y: -180, 
+                            type: 'analytics', 
+                            label: 'Monitor', 
+                            anchor: false
+                        },
+                        {
+                            id: 'queue', 
+                            x: -60, y: 180, 
+                            type: 'messaging', 
+                            label: 'Message Queue', 
+                            anchor: false
+                        },
+                        {
+                            id: 'auth', 
+                            x: 200, y: 80, 
+                            type: 'security', 
+                            label: 'Auth Service', 
+                            anchor: false
+                        }
+                    ];
+                }
+                
+                // Check nodes in reverse z-order (top to bottom) for proper layering
+                const orderedNodes = this.getNodesInZOrder(nodes);
+                
+                for (let i = orderedNodes.length - 1; i >= 0; i--) {
+                    const node = orderedNodes[i];
+                    const distance = Math.sqrt(
+                        Math.pow(worldX - node.x, 2) + Math.pow(worldY - node.y, 2)
+                    );
+                    
+                    // Use slightly larger radius for easier interaction
+                    const hitRadius = node.anchor ? this.hoverRadius * 1.2 : this.hoverRadius;
+                    
+                    if (distance <= hitRadius) {
+                        return node;
+                    }
+                }
+                
+                return null;
+            }
+            
+            getNodesInZOrder(nodes) {
+                // If we have a z-order array, use it to sort nodes
+                if (this.nodeZOrder.length > 0) {
+                    const zOrderMap = {};
+                    this.nodeZOrder.forEach((nodeId, index) => {
+                        zOrderMap[nodeId] = index;
+                    });
+                    
+                    return [...nodes].sort((a, b) => {
+                        const aOrder = zOrderMap[a.id] !== undefined ? zOrderMap[a.id] : -1;
+                        const bOrder = zOrderMap[b.id] !== undefined ? zOrderMap[b.id] : -1;
+                        return aOrder - bOrder;
+                    });
+                } else {
+                    // Initialize z-order with current node order
+                    this.nodeZOrder = nodes.map(node => node.id);
+                    return [...nodes];
+                }
+            }
+            
+            bringNodeToFront(node) {
+                // Remove node from current position in z-order
+                const nodeIndex = this.nodeZOrder.indexOf(node.id);
+                if (nodeIndex > -1) {
+                    this.nodeZOrder.splice(nodeIndex, 1);
+                }
+                
+                // Add node to the end (front) of z-order
+                this.nodeZOrder.push(node.id);
+                
+                // Ensure z-order doesn't grow indefinitely
+                if (this.nodeZOrder.length > 100) {
+                    this.nodeZOrder = this.nodeZOrder.slice(-50);
+                }
+            }
+        }
+        
+        // Export System
+        class ExportManager {
+            constructor(canvas) {
+                this.canvas = canvas;
+            }
+            
+            exportToPDF() {
+                try {
+                    // Convert canvas to image data URL
+                    const imgData = this.canvas.toDataURL('image/png');
+                    // Create jsPDF instance (landscape, size matches canvas)
+                    const pdf = new window.jspdf.jsPDF({
+                        orientation: this.canvas.width > this.canvas.height ? 'landscape' : 'portrait',
+                        unit: 'px',
+                        format: [this.canvas.width, this.canvas.height]
+                    });
+                    // Add image to PDF
+                    pdf.addImage(imgData, 'PNG', 0, 0, this.canvas.width, this.canvas.height);
+                    // Save as PDF
+                    pdf.save(`graph_visualization_${new Date().getTime()}.pdf`);
+                    console.log('Graph exported as PDF');
+                } catch (error) {
+                    console.error('Export to PDF failed:', error);
+                    alert('Export failed. Please try again.');
+                }
+            }
+            
+            exportToSVG() {
+                try {
+                    const svgWidth = this.canvas.width;
+                    const svgHeight = this.canvas.height;
+                    const transform = window.canvasNavigator.transform;
+
+                    // Start SVG content
+                    let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+            <svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="white"/>`;
+
+                    // Add transform group
+                    svgContent += `<g transform="translate(${transform.x}, ${transform.y}) scale(${transform.scale})">`;
+
+                    // Draw grid (optional, simplified)
+                    const baseGridSize = 50;
+                    const topLeft = window.canvasNavigator.screenToWorld(0, 0);
+                    const bottomRight = window.canvasNavigator.screenToWorld(svgWidth, svgHeight);
+                    const startX = Math.floor(topLeft.x / baseGridSize) * baseGridSize;
+                    const endX = Math.ceil(bottomRight.x / baseGridSize) * baseGridSize;
+                    const startY = Math.floor(topLeft.y / baseGridSize) * baseGridSize;
+                    const endY = Math.ceil(bottomRight.y / baseGridSize) * baseGridSize;
+                    for (let x = startX; x <= endX; x += baseGridSize) {
+                        svgContent += `<line x1="${x}" y1="${startY}" x2="${x}" y2="${endY}" stroke="rgba(0,0,0,0.05)" stroke-width="${0.5 / transform.scale}"/>`;
+                    }
+                    for (let y = startY; y <= endY; y += baseGridSize) {
+                        svgContent += `<line x1="${startX}" y1="${y}" x2="${endX}" y2="${y}" stroke="rgba(0,0,0,0.05)" stroke-width="${0.5 / transform.scale}"/>`;
+                    }
+
+                    // Use actual graph data
+                    const nodes = GRAPH_DATA.nodes;
+                    const edges = GRAPH_DATA.edges;
+
+                    // Draw edges
+                    edges.forEach(edge => {
+                        const source = nodes.find(n => n.id === edge.source);
+                        const target = nodes.find(n => n.id === edge.target);
+                        if (!source || !target) return;
+
+                        // Calculate edge endpoints (accounting for node radius)
+                        const dx = target.x - source.x;
+                        const dy = target.y - source.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance === 0) return;
+                        const unitX = dx / distance;
+                        const unitY = dy / distance;
+                        const baseNodeRadius = 35;
+                        const sourceRadius = source.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
+                        const targetRadius = target.anchor ? baseNodeRadius * 1.2 : baseNodeRadius;
+                        const startX = source.x + unitX * sourceRadius;
+                        const startY = source.y + unitY * sourceRadius;
+                        const endX = target.x - unitX * targetRadius;
+                        const endY = target.y - unitY * targetRadius;
+
+                        // Edge color
+                        const edgeColor = window.styleManager.getEdgeColor(edge.type);
+
+                        svgContent += `<line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${edgeColor}" stroke-width="${2 / transform.scale}"/>`;
+
+                        // Draw arrow for directed edges
+                        if (edge.directed) {
+                            // Arrowhead
+                            const arrowSize = 8 / transform.scale;
+                            const angle = Math.atan2(endY - startY, endX - startX);
+                            const arrowAngle = Math.PI / 6;
+                            const arrowX1 = endX - arrowSize * Math.cos(angle - arrowAngle);
+                            const arrowY1 = endY - arrowSize * Math.sin(angle - arrowAngle);
+                            const arrowX2 = endX - arrowSize * Math.cos(angle + arrowAngle);
+                            const arrowY2 = endY - arrowSize * Math.sin(angle + arrowAngle);
+                            svgContent += `<polyline points="${endX},${endY} ${arrowX1},${arrowY1} ${arrowX2},${arrowY2} ${endX},${endY}" fill="none" stroke="${edgeColor}" stroke-width="${2 / transform.scale}"/>`;
+                        }
+
+                        // Edge label
+                        if (window.labelsEnabled && edge.label) {
+                            const midX = (source.x + target.x) / 2;
+                            const midY = (source.y + target.y) / 2;
+                            const fontSize = Math.max(8, 10 / transform.scale);
+                            const padding = 2 / transform.scale;
+                            const textWidth = edge.label.length * fontSize * 0.6;
+                            const bgWidth = textWidth + (padding * 2);
+                            const bgHeight = fontSize + (padding * 2);
+
+                            svgContent += `<rect x="${midX - bgWidth / 2}" y="${midY - bgHeight / 2}" width="${bgWidth}" height="${bgHeight}" fill="rgba(255,255,255,0.9)" stroke="rgba(0,0,0,0.1)" stroke-width="${0.5 / transform.scale}"/>`;
+                            svgContent += `<text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" fill="rgba(0,0,0,0.7)">${edge.label}</text>`;
+                        }
+                    });
+
+                    // Draw nodes
+                    nodes.forEach(node => {
+                        const nodeColor = node.anchor ? 'rgba(239, 68, 68, 0.8)' : window.styleManager.getNodeColor(node.label);
+                        const borderColor = 'rgba(0, 0, 0, 0.3)';
+                        const nodeRadius = node.anchor ? 35 : 30;
+                        if (node.anchor) {
+                            // Draw anchor nodes as squares
+                            svgContent += `<rect x="${node.x - nodeRadius}" y="${node.y - nodeRadius}" width="${nodeRadius * 2}" height="${nodeRadius * 2}" fill="${nodeColor}" stroke="${borderColor}" stroke-width="${2 / transform.scale}"/>`;
+                        } else {
+                            // Draw regular nodes as circles
+                            svgContent += `<circle cx="${node.x}" cy="${node.y}" r="${nodeRadius}" fill="${nodeColor}" stroke="${borderColor}" stroke-width="${2 / transform.scale}"/>`;
+                        }
+
+                        // Node label
+                        if (window.labelsEnabled && node.label) {
+                            const fontSize = Math.max(10, 12 / transform.scale);
+                            const padding = 4 / transform.scale;
+                            const textWidth = node.label.length * fontSize * 0.6;
+                            const bgWidth = textWidth + (padding * 2);
+                            const bgHeight = fontSize + (padding * 2);
+
+                            svgContent += `<rect x="${node.x - bgWidth / 2}" y="${node.y - bgHeight / 2}" width="${bgWidth}" height="${bgHeight}" fill="rgba(255,255,255,0.8)" stroke="rgba(0,0,0,0.2)" stroke-width="${1 / transform.scale}"/>`;
+                            svgContent += `<text x="${node.x}" y="${node.y}" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" fill="rgba(0,0,0,0.9)">${node.label}</text>`;
+                        }
+                    });
+
+                    // Close transform group and SVG
+                    svgContent += '</g></svg>';
+
+                    // Create blob and download
+                    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `graph_visualization_${new Date().getTime()}.svg`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+
+                    console.log('Graph exported as SVG');
+                } catch (error) {
+                    console.error('Export to SVG failed:', error);
+                    alert('Export failed. Please try again.');
+                }
+            }
+        }
+
+        // UI Management System
+        class UIManager {
+            constructor() {
+                this.setupLegend();
+                this.setupControls();
+            }
+            
+            setupLegend() {
+                const legendContent = document.getElementById('legend-content');
+                
+                // Check if we have predefined legend data
+                if (GRAPH_DATA.legend && (GRAPH_DATA.legend.nodeTypes.length > 0 || GRAPH_DATA.legend.edgeTypes.length > 0)) {
+                    // Use predefined legend data and populate StyleManager with those colors
+                    this.setupPredefinedLegend(legendContent);
+                } else {
+                    // Initialize with placeholder - will be populated by StyleManager.discoverTypes()
+                    legendContent.innerHTML = `
+                        <div class="legend-section">
+                            <h4>Legend</h4>
+                            <div class="legend-item">
+                                <span>Analyzing graph types...</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            setupPredefinedLegend(legendContent) {
+                legendContent.innerHTML = '';
+                
+                // Node types section
+                if (GRAPH_DATA.legend.nodeTypes.length > 0) {
+                    const nodeSection = document.createElement('div');
+                    nodeSection.className = 'legend-section';
+                    
+                    const header = document.createElement('h4');
+                    header.textContent = 'Node Types';
+                    nodeSection.appendChild(header);
+                    
+                    GRAPH_DATA.legend.nodeTypes.forEach(nodeType => {
+                        const item = document.createElement('div');
+                        item.className = 'legend-item';
+                        
+                        const colorBox = document.createElement('div');
+                        colorBox.className = 'legend-color';
+                        colorBox.style.backgroundColor = nodeType.color;
+                        
+                        const label = document.createElement('span');
+                        label.textContent = nodeType.type;
+                        
+                        item.appendChild(colorBox);
+                        item.appendChild(label);
+                        nodeSection.appendChild(item);
+                        
+                        // Populate StyleManager with predefined colors
+                        if (window.styleManager) {
+                            window.styleManager.nodeTypeColors.set(nodeType.type, nodeType.color);
+                            window.styleManager.discoveredNodeTypes.add(nodeType.type);
+                        }
+                    });
+                    
+                    legendContent.appendChild(nodeSection);
+                }
+                
+                // Edge types section
+                if (GRAPH_DATA.legend.edgeTypes.length > 0) {
+                    const edgeSection = document.createElement('div');
+                    edgeSection.className = 'legend-section';
+                    
+                    const header = document.createElement('h4');
+                    header.textContent = 'Edge Types';
+                    edgeSection.appendChild(header);
+                    
+                    GRAPH_DATA.legend.edgeTypes.forEach(edgeType => {
+                        const item = document.createElement('div');
+                        item.className = 'legend-item';
+                        
+                        const colorBox = document.createElement('div');
+                        colorBox.className = 'legend-color';
+                        colorBox.style.backgroundColor = edgeType.color;
+                        
+                        const label = document.createElement('span');
+                        label.textContent = edgeType.type;
+                        
+                        item.appendChild(colorBox);
+                        item.appendChild(label);
+                        edgeSection.appendChild(item);
+                        
+                        // Populate StyleManager with predefined colors
+                        if (window.styleManager) {
+                            window.styleManager.edgeTypeColors.set(edgeType.type, edgeType.color);
+                            window.styleManager.discoveredEdgeTypes.add(edgeType.type);
+                        }
+                    });
+                    
+                    legendContent.appendChild(edgeSection);
+                }
+                
+                // Always add anchor nodes section
+                const anchorSection = document.createElement('div');
+                anchorSection.className = 'legend-section';
+                
+                const header = document.createElement('h4');
+                header.textContent = 'Special Nodes';
+                anchorSection.appendChild(header);
+                
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-shape';
+                colorBox.style.backgroundColor = 'rgba(239, 68, 68, 0.8)';
+                colorBox.style.borderRadius = '2px';
+                
+                const label = document.createElement('span');
+                label.textContent = 'Anchor Nodes';
+                
+                item.appendChild(colorBox);
+                item.appendChild(label);
+                anchorSection.appendChild(item);
+                
+                legendContent.appendChild(anchorSection);
+            }
+            
+            setupControls() {
+                // Initialize labels as enabled by default
+                window.labelsEnabled = true;
+                
+                // Label toggle functionality
+                const labelToggle = document.getElementById('label-toggle');
+                labelToggle.addEventListener('change', function() {
+                    window.labelsEnabled = this.checked;
+                    // Trigger re-render to show/hide labels
+                    if (window.canvasNavigator) {
+                        window.canvasNavigator.render();
+                    }
+                    console.log('Labels', this.checked ? 'enabled' : 'disabled');
+                });
+                
+                // Initialize export manager
+                const canvas = document.getElementById('graph-canvas');
+                window.exportManager = new ExportManager(canvas);
+                
+                // Export functionality
+                document.getElementById('export-pdf').addEventListener('click', function() {
+                    window.exportManager.exportToPDF();
+                });
+                
+                document.getElementById('export-svg').addEventListener('click', function() {
+                    window.exportManager.exportToSVG();
+                });
+            }
+            
+            updateGraphStats(nodeCount, edgeCount, density) {
+                const statsElement = document.getElementById('graph-stats');
+                const typeStats = window.styleManager ? window.styleManager.getTypeStatistics() : {};
+                const nodeTypeCount = typeStats.nodeTypeCount || 0;
+                const edgeTypeCount = typeStats.edgeTypeCount || 0;
+                
+                statsElement.textContent = `${nodeCount} nodes (${nodeTypeCount} types), ${edgeCount} edges (${edgeTypeCount} types)`;
+            }
+        }
+        
+        // Plots Dropdown Manager
+        // Implements requirements 3.1, 3.2 for plots dropdown functionality
+        class PlotsDropdownManager {
+            constructor() {
+                this.dropdown = document.getElementById('plots-dropdown');
+                this.header = document.getElementById('plots-header');
+                this.menu = document.getElementById('plots-menu');
+                this.currentSpan = document.getElementById('plots-current');
+                this.isOpen = false;
+                this.htmlFiles = [];
+                this.currentFile = this.getCurrentFileName();
+                
+                this.init();
+            }
+            
+            init() {
+                // Scan for HTML files and populate dropdown
+                this.scanHtmlFiles();
+                this.populateDropdown();
+                this.setupEventListeners();
+                this.updateCurrentSelection();
+            }
+            
+            getCurrentFileName() {
+                // Get current file name from URL
+                const path = window.location.pathname;
+                return path.substring(path.lastIndexOf('/') + 1) || 'index.html';
+            }
+            
+            scanHtmlFiles() {
+                // Since we can't directly access the file system from the browser,
+                // we'll use a predefined list of known HTML files that would be
+                // generated by the visualizer system
+                const knownHtmlFiles = [
+                    'sample_directed_graph.html',
+                    'test_7node_graph.html',
+                    'test_context_menu_isolation.html',
+                    'test_directed_graph_7nodes.html',
+                    'test_dynamic_styling.html',
+                    'test_enhanced_grid.html',
+                    'test_fixed_7node_graph.html',
+                    'test_graph_rendering.html',
+                    'test_label_export.html',
+                    'test_label_rendering.html',
+                    'test_label_requirements.html',
+                    'test_legend_generation.html',
+                    'test_navigation.html',
+                    'test_node_interaction.html'
+                ];
+                
+                // Filter out template.html and add display names
+                this.htmlFiles = knownHtmlFiles
+                    .filter(file => file !== 'template.html')
+                    .map(file => ({
+                        filename: file,
+                        displayName: this.formatDisplayName(file)
+                    }))
+                    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+                
+                console.log(`Found ${this.htmlFiles.length} HTML visualization files`);
+            }
+            
+            formatDisplayName(filename) {
+                // Convert filename to readable display name
+                return filename
+                    .replace('.html', '')
+                    .replace(/test_|sample_/g, '')
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, l => l.toUpperCase());
+            }
+            
+            populateDropdown() {
+                // Clear existing menu items
+                this.menu.innerHTML = '';
+                
+                // Add menu items for each HTML file
+                this.htmlFiles.forEach(file => {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.textContent = file.displayName;
+                    item.dataset.filename = file.filename;
+                    
+                    // Mark current file
+                    if (file.filename === this.currentFile) {
+                        item.classList.add('current');
+                    }
+                    
+                    // Add click handler for navigation
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.navigateToFile(file.filename);
+                    });
+                    
+                    this.menu.appendChild(item);
+                });
+            }
+            
+            setupEventListeners() {
+                // Toggle dropdown on header click
+                this.header.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.toggle();
+                });
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!this.dropdown.contains(e.target)) {
+                        this.close();
+                    }
+                });
+                
+                // Close dropdown on escape key
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.isOpen) {
+                        this.close();
+                    }
+                });
+            }
+            
+            toggle() {
+                if (this.isOpen) {
+                    this.close();
+                } else {
+                    this.open();
+                }
+            }
+            
+            open() {
+                this.dropdown.classList.add('open');
+                this.isOpen = true;
+            }
+            
+            close() {
+                this.dropdown.classList.remove('open');
+                this.isOpen = false;
+            }
+            
+            updateCurrentSelection() {
+                // Update the header text to show current file
+                const currentFileObj = this.htmlFiles.find(file => file.filename === this.currentFile);
+                if (currentFileObj) {
+                    this.currentSpan.textContent = currentFileObj.displayName;
+                } else {
+                    this.currentSpan.textContent = 'Current Visualization';
+                }
+            }
+            
+            navigateToFile(filename) {
+                if (filename !== this.currentFile) {
+                    // Navigate to the selected file
+                    window.location.href = filename;
+                } else {
+                    // Just close the dropdown if clicking current file
+                    this.close();
+                }
+            }
+        }
+
+        // Initialize canvas and set up navigation system
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('graph-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size to full window
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                if (window.canvasNavigator) {
+                    window.canvasNavigator.render();
+                }
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Initialize style manager
+            window.styleManager = new StyleManager();
+            
+            // Initialize layout engine
+            window.layoutEngine = new GraphLayoutEngine();
+            window.labelsEnabled = true;
+            
+            // Apply initial layout and discover types if graph data exists
+            if (GRAPH_DATA && GRAPH_DATA.nodes && GRAPH_DATA.nodes.length > 0) {
+                window.styleManager.discoverTypes(GRAPH_DATA.nodes, GRAPH_DATA.edges);
+                window.layoutEngine.generateInitialLayout(GRAPH_DATA.nodes, GRAPH_DATA.edges);
+
+                // --- Center the graph by shifting node positions ---
+                // Compute bounding box of all nodes
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                GRAPH_DATA.nodes.forEach(node => {
+                    if (node.x < minX) minX = node.x;
+                    if (node.y < minY) minY = node.y;
+                    if (node.x > maxX) maxX = node.x;
+                    if (node.y > maxY) maxY = node.y;
+                });
+                const graphWidth = maxX - minX;
+                const graphHeight = maxY - minY;
+
+                // Center of graph in world coordinates
+                const graphCenterX = minX + graphWidth / 2;
+                const graphCenterY = minY + graphHeight / 2;
+
+                // Center of canvas in screen coordinates
+                const canvasCenterX = window.innerWidth / 2;
+                const canvasCenterY = window.innerHeight / 2;
+
+                // Calculate offset to shift all nodes so the graph is centered
+                const offsetX = canvasCenterX - graphCenterX;
+                const offsetY = canvasCenterY - graphCenterY;
+
+                // Shift all node positions
+                GRAPH_DATA.nodes.forEach(node => {
+                    node.x += offsetX;
+                    node.y += offsetY;
+                });
+
+                // No need to set window.initialTransform for centering
+            }
+            
+            // Initialize navigation system
+            window.canvasNavigator = new CanvasNavigator(canvas, ctx);
+            
+            // Initialize UI management system
+            window.uiManager = new UIManager();
+            
+            // Initialize plots dropdown manager
+            window.plotsDropdownManager = new PlotsDropdownManager();
+            
+            // Update title and stats
+            document.getElementById('graph-title').textContent = GRAPH_DATA.metadata.title;
+            
+            // Update stats with type information
+            if (window.uiManager) {
+                window.uiManager.updateGraphStats(
+                    GRAPH_DATA.metadata.nodeCount, 
+                    GRAPH_DATA.metadata.edgeCount, 
+                    GRAPH_DATA.metadata.density
+                );
+            } else {
+                document.getElementById('graph-stats').textContent = 
+                    `${GRAPH_DATA.metadata.nodeCount} nodes, ${GRAPH_DATA.metadata.edgeCount} edges`;
+            }
+            
+            // Hide context menu on click outside
+            document.addEventListener('click', function() {
+                document.getElementById('context-menu').classList.add('hidden');
+            });
+            
+            console.log('Interactive Graph Visualizer with navigation system and UI components loaded successfully');
+        });
+    </script>
+</body>
+</html>
