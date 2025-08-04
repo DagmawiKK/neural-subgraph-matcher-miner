@@ -1183,8 +1183,19 @@
 
                 // 5. Layout parameters
                 const numNodes = nodes.length;
-                const baseRadius = numNodes <= 8 ? 180 : 100;
+                let baseRadius;
                 const radiusIncrement = Math.max(minLayerDistance, numNodes <= 8 ? 140 : 90);
+                if (numNodes <= 5) {
+                    baseRadius = 280;
+                } else if (numNodes <= 10) {
+                    baseRadius = 350;
+                } else if (numNodes <= 15) {
+                    baseRadius = 350;
+                } else if (numNodes <= 20) {
+                    baseRadius = 560;
+                } else {
+                    baseRadius = 640;
+                }
 
                 // 6. Assign positions
                 const pos = {};
