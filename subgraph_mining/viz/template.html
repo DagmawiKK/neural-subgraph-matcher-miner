@@ -2149,8 +2149,31 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
+                const isIsolated = this.isolatedNode !== null;
+
                 nodes.forEach(node => {
                     if (node.label) {
+                        // Isolation logic
+                        let blur = 0;
+                        let bgOpacity = 0.7;
+                        let textOpacity = 0.95;
+                        let borderOpacity = 0.15;
+
+                        if (isIsolated) {
+                            const isIsolatedNode = this.isolatedNode && this.isolatedNode.id === node.id;
+                            const isConnectedToIsolated = isIsolated && !isIsolatedNode && this.isNodeConnectedToIsolated(node);
+
+                            if (!isIsolatedNode && !isConnectedToIsolated) {
+                                blur = 2;
+                                bgOpacity = 0.3;
+                                textOpacity = 0.2;
+                                borderOpacity = 0.05;
+                            }
+                        }
+
+                        ctx.save();
+                        ctx.filter = blur ? `blur(${blur}px)` : 'none';
+
                         // Use node.x, node.y directly (world coordinates)
                         const labelX = node.x;
                         const labelY = node.y;
@@ -2169,8 +2192,8 @@
                         const bgWidth = textWidth + (padding * 2);
                         const bgHeight = lines.length * textHeight + (padding * 2);
 
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+                        ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
+                        ctx.strokeStyle = `rgba(0, 0, 0, ${borderOpacity})`;
                         ctx.lineWidth = 1;
 
                         const cornerRadius = 4;
@@ -2183,12 +2206,14 @@
                             cornerRadius
                         );
 
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+                        ctx.fillStyle = `rgba(0, 0, 0, ${textOpacity})`;
                         const totalTextHeight = lines.length * textHeight;
                         const startY = labelY - totalTextHeight / 2 + textHeight / 2;
                         lines.forEach((line, i) => {
                             ctx.fillText(line, labelX, startY + i * textHeight);
                         });
+
+                        ctx.restore();
                     }
                 });
             }
