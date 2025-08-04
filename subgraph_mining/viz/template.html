@@ -1112,7 +1112,7 @@
             }
             // Add this to your GraphLayoutEngine class
 
-            generateConcentricLayout(nodes, edges) {
+            generateConcentricLayout(nodes, edges, minLayerDistance = 380) {
                 // 1. Build adjacency and degree maps
                 const nodeMap = {};
                 const degreeMap = {};
@@ -1184,7 +1184,7 @@
                 // 5. Layout parameters
                 const numNodes = nodes.length;
                 const baseRadius = numNodes <= 8 ? 180 : 100;
-                const radiusIncrement = numNodes <= 8 ? 140 : 90;
+                const radiusIncrement = Math.max(minLayerDistance, numNodes <= 8 ? 140 : 90);
 
                 // 6. Assign positions
                 const pos = {};
