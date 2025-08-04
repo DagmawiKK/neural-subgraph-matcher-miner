@@ -1110,6 +1110,181 @@
                 // Apply force-directed layout to improve positioning
                 this.applyForceDirectedLayout(nodes, edges);
             }
+            // Add this to your GraphLayoutEngine class
+
+            generateConcentricLayout(nodes, edges) {
+                // 1. Build adjacency and degree maps
+                const nodeMap = {};
+                const degreeMap = {};
+                const neighborsMap = {};
+                nodes.forEach(node => {
+                    nodeMap[node.id] = node;
+                    degreeMap[node.id] = 0;
+                    neighborsMap[node.id] = [];
+                });
+                edges.forEach(edge => {
+                    if (nodeMap[edge.source] && nodeMap[edge.target]) {
+                        degreeMap[edge.source]++;
+                        degreeMap[edge.target]++;
+                        neighborsMap[edge.source].push(edge.target);
+                        if (!edge.directed) {
+                            neighborsMap[edge.target].push(edge.source);
+                        }
+                    }
+                });
+
+                // 2. Find highest degree node
+                let centerNodeId = nodes[0].id;
+                let maxDegree = -1;
+                for (const id in degreeMap) {
+                    if (degreeMap[id] > maxDegree) {
+                        maxDegree = degreeMap[id];
+                        centerNodeId = id;
+                    }
+                }
+
+                // 3. BFS to assign layers and parents
+                const distances = {};
+                const allParents = {};
+                const primaryParent = {};
+                const visited = new Set();
+                const queue = [];
+                distances[centerNodeId] = 0;
+                allParents[centerNodeId] = [];
+                primaryParent[centerNodeId] = null;
+                queue.push(centerNodeId);
+                visited.add(centerNodeId);
+
+                while (queue.length > 0) {
+                    const nodeId = queue.shift();
+                    const dist = distances[nodeId];
+                    const neighbors = neighborsMap[nodeId] || [];
+                    neighbors.forEach(neighborId => {
+                        if (!visited.has(neighborId)) {
+                            distances[neighborId] = dist + 1;
+                            allParents[neighborId] = [nodeId];
+                            primaryParent[neighborId] = nodeId;
+                            queue.push(neighborId);
+                            visited.add(neighborId);
+                        } else if (distances[neighborId] === dist + 1) {
+                            if (!allParents[neighborId]) allParents[neighborId] = [];
+                            allParents[neighborId].push(nodeId);
+                        }
+                    });
+                }
+
+                // 4. Group nodes by layer
+                const layers = {};
+                for (const nodeId in distances) {
+                    const d = distances[nodeId];
+                    if (!layers[d]) layers[d] = [];
+                    layers[d].push(nodeId);
+                }
+
+                // 5. Layout parameters
+                const numNodes = nodes.length;
+                const baseRadius = numNodes <= 8 ? 180 : 100;
+                const radiusIncrement = numNodes <= 8 ? 140 : 90;
+
+                // 6. Assign positions
+                const pos = {};
+                pos[centerNodeId] = { x: 0, y: 0 };
+
+                // Layer 1: arrange in a circle
+                if (layers[1]) {
+                    const layer1 = layers[1];
+                    layer1.sort((a, b) => degreeMap[b] - degreeMap[a] || a.localeCompare(b));
+                    const n = layer1.length;
+                    for (let i = 0; i < n; i++) {
+                        const angle = 2 * Math.PI * i / n;
+                        pos[layer1[i]] = {
+                            x: baseRadius * Math.cos(angle),
+                            y: baseRadius * Math.sin(angle)
+                        };
+                    }
+                }
+
+                // Layers 2+
+                const maxLayer = Math.max(...Object.keys(layers).map(Number));
+                for (let layer = 2; layer <= maxLayer; layer++) {
+                    if (!layers[layer]) continue;
+                    const nodesInLayer = layers[layer];
+                    nodesInLayer.forEach(nodeId => {
+                        const parents = allParents[nodeId] || [];
+                        if (parents.length === 1) {
+                            // Single parent: radial from center through parent
+                            const parentPos = pos[parents[0]];
+                            const norm = Math.sqrt(parentPos.x * parentPos.x + parentPos.y * parentPos.y);
+                            const radialDir = norm > 0 ? { x: parentPos.x / norm, y: parentPos.y / norm } : { x: 1, y: 0 };
+                            let layerDist = baseRadius + (layer - 1) * radiusIncrement;
+                            // Sibling spread
+                            const siblings = nodesInLayer.filter(nid => (allParents[nid] || []).length === 1 && allParents[nid][0] === parents[0]);
+                            let offset = 0;
+                            if (siblings.length > 1) {
+                                const idx = siblings.indexOf(nodeId);
+                                const spread = Math.min(80, layerDist * 0.3);
+                                const perpDir = { x: -radialDir.y, y: radialDir.x };
+                                offset = (idx - (siblings.length - 1) / 2) * (spread / Math.max(1, siblings.length - 1));
+                                pos[nodeId] = {
+                                    x: radialDir.x * layerDist + perpDir.x * offset,
+                                    y: radialDir.y * layerDist + perpDir.y * offset
+                                };
+                            } else {
+                                pos[nodeId] = {
+                                    x: radialDir.x * layerDist,
+                                    y: radialDir.y * layerDist
+                                };
+                            }
+                        } else if (parents.length > 1) {
+                            // Multiple parents: centroid, then move outward
+                            let centroid = { x: 0, y: 0 };
+                            let count = 0;
+                            parents.forEach(pid => {
+                                if (pos[pid]) {
+                                    centroid.x += pos[pid].x;
+                                    centroid.y += pos[pid].y;
+                                    count++;
+                                }
+                            });
+                            if (count > 0) {
+                                centroid.x /= count;
+                                centroid.y /= count;
+                            }
+                            const norm = Math.sqrt(centroid.x * centroid.x + centroid.y * centroid.y);
+                            const direction = norm > 0 ? { x: centroid.x / norm, y: centroid.y / norm } : { x: 1, y: 0 };
+                            let layerDist = baseRadius + (layer - 1) * radiusIncrement;
+                            // For diamond patterns, bring closer
+                            if (parents.length === 2 && count === 2) {
+                                // Check if parents are far apart
+                                const p1 = pos[parents[0]], p2 = pos[parents[1]];
+                                const n1 = Math.sqrt(p1.x * p1.x + p1.y * p1.y);
+                                const n2 = Math.sqrt(p2.x * p2.x + p2.y * p2.y);
+                                if (n1 > 0 && n2 > 0) {
+                                    const dir1 = { x: p1.x / n1, y: p1.y / n1 };
+                                    const dir2 = { x: p2.x / n2, y: p2.y / n2 };
+                                    const dot = dir1.x * dir2.x + dir1.y * dir2.y;
+                                    const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+                                    if (angle > Math.PI / 2) {
+                                        layerDist *= 0.8;
+                                    }
+                                }
+                            }
+                            pos[nodeId] = {
+                                x: direction.x * layerDist,
+                                y: direction.y * layerDist
+                            };
+                        }
+                    });
+                }
+
+                // 7. Assign positions to node objects
+                nodes.forEach(node => {
+                    if (pos[node.id]) {
+                        node.x = pos[node.id].x;
+                        node.y = pos[node.id].y;
+                    }
+                });
+            }   
         }
         
         // Canvas Navigation System
@@ -1875,7 +2050,8 @@
                 
                 // Apply layout algorithm to test nodes
                 if (window.layoutEngine) {
-                    window.layoutEngine.generateInitialLayout(testNodes, testEdges);
+                    // window.layoutEngine.generateInitialLayout(testNodes, testEdges);
+                    window.layoutEngine.generateConcentricLayout(GRAPH_DATA.nodes, GRAPH_DATA.edges);
                 }
                 
                 this.drawEdges(testEdges, testNodes);
@@ -3526,7 +3702,8 @@
             // Apply initial layout and discover types if graph data exists
             if (GRAPH_DATA && GRAPH_DATA.nodes && GRAPH_DATA.nodes.length > 0) {
                 window.styleManager.discoverTypes(GRAPH_DATA.nodes, GRAPH_DATA.edges);
-                window.layoutEngine.generateInitialLayout(GRAPH_DATA.nodes, GRAPH_DATA.edges);
+                // window.layoutEngine.generateInitialLayout(GRAPH_DATA.nodes, GRAPH_DATA.edges);
+                window.layoutEngine.generateConcentricLayout(GRAPH_DATA.nodes, GRAPH_DATA.edges);
 
                 // --- Center the graph by shifting node positions ---
                 // Compute bounding box of all nodes
