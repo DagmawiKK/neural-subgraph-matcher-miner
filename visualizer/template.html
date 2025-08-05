@@ -597,7 +597,7 @@
                 },
                 {
                         "id": "ensg00000043514",
-                        "label": "gene",
+                        "label": "test",
                         "gene_name": "TRIT1",
                         "anchor": true,
                         "x": 94.7669066451839,
@@ -736,7 +736,7 @@
                 
                 // Discover all unique node types (excluding anchors as they have special handling)
                 nodes.forEach(node => {
-                    if (node.label && !node.anchor) {
+                    if (node.label) {
                         this.discoveredNodeTypes.add(node.label);
                     }
                 });
@@ -963,9 +963,13 @@
                 
                 const colorBox = document.createElement('div');
                 colorBox.className = 'legend-shape';
-                colorBox.style.backgroundColor = 'rgba(239, 68, 68, 0.8)';
                 colorBox.style.borderRadius = '2px'; // Make it more square-like
-                
+                let anchorColor = 'rgba(239, 68, 68, 0.8)';
+                const anchorNode = (GRAPH_DATA.nodes || []).find(n => n.anchor);
+                if (anchorNode && window.styleManager) {
+                    anchorColor = window.styleManager.getNodeColor(anchorNode.label);
+                }
+                colorBox.style.backgroundColor = anchorColor;
                 const label = document.createElement('span');
                 label.textContent = 'Anchor Nodes';
                 
@@ -2306,9 +2310,6 @@
             }
             
             getNodeColor(node) {
-                if (node.anchor) {
-                    return 'rgba(239, 68, 68, 0.8)'; // Fixed red color for anchor nodes
-                }
                 
                 // Get or generate color for this node type
                 return window.styleManager.getNodeColor(node.label);
@@ -2557,8 +2558,8 @@
                 const endY = bottomRight.y;
                 
                 // Enhanced origin axes with gradient-like effect
-                ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
-                ctx.lineWidth = lineWidth * 3;
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.03)';
+                ctx.lineWidth = lineWidth * 1.5;
                 
                 // X-axis
                 if (startY <= 0 && endY >= 0) {
@@ -2574,14 +2575,6 @@
                     ctx.moveTo(0, startY);
                     ctx.lineTo(0, endY);
                     ctx.stroke();
-                }
-                
-                // Add subtle center point indicator
-                if (startX <= 0 && endX >= 0 && startY <= 0 && endY >= 0) {
-                    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 4 / this.transform.scale, 0, 2 * Math.PI);
-                    ctx.fill();
                 }
             }
             
