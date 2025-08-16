@@ -546,6 +546,19 @@
             transition: filter 0.3s;
         }
 
+        /* Submenu */
+        #copy-submenu .context-menu-item {
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-primary);
+            transition: background-color 0.2s ease;
+        }
+
+        #copy-submenu .context-menu-item:hover {
+            background-color: var(--bg-primary);
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .ui-card {
@@ -668,6 +681,11 @@
         <div class="context-menu-item" id="isolate-node">Isolate</div>
         <div class="context-menu-item" id="copy-label">Copy Label</div>
         <div class="context-menu-item" id="cancel-isolate" style="display: none;">Cancel Isolate</div>
+    </div>
+
+    <!-- Sub Context Menu for Copy Options -->
+    <div id="copy-submenu" class="hidden" style="position: absolute; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; box-shadow: var(--card-shadow); backdrop-filter: blur(10px); z-index: 2001; padding: 4px 0; min-width: 120px;">
+        <!-- Copy options will be populated dynamically -->
     </div>
 
     <!-- Chatbot UI -->
@@ -1666,6 +1684,7 @@ const GRAPH_DATA = {
                 }
                 
                 // Hide context menu on any click
+                this.hideCopySubmenu()
                 this.hideContextMenu();
             }
             
@@ -1697,11 +1716,11 @@ const GRAPH_DATA = {
                     }
                 });
                 
-                // Copy label functionality
-                document.getElementById('copy-label').addEventListener('click', () => {
+                // Copy label functionality - now shows submenu
+                document.getElementById('copy-label').addEventListener('click', (e) => {
+                    e.stopPropagation();
                     if (this.contextMenuNode) {
-                        this.copyNodeLabel(this.contextMenuNode);
-                        this.hideContextMenu();
+                        this.showCopySubmenu(e.clientX, e.clientY, this.contextMenuNode);
                     }
                 });
                 
@@ -1711,13 +1730,22 @@ const GRAPH_DATA = {
                     this.hideContextMenu();
                 });
                 
-                // Hide context menu when clicking outside
+                // Simplified global click handler
                 document.addEventListener('click', (e) => {
-                    if (!this.contextMenu.contains(e.target)) {
-                        this.hideContextMenu();
+                    const contextMenu = document.getElementById('context-menu');
+                    const submenu = document.getElementById('copy-submenu');
+                    
+                    // Only hide if clicking outside both menus
+                    if (!contextMenu.contains(e.target) && !submenu.contains(e.target)) {
+                        contextMenu.classList.add('hidden');
+                        contextMenu.style.display = 'none';
+                        submenu.classList.add('hidden');
+                        submenu.style.display = 'none';
+                        this.contextMenuNode = null;
                     }
                 });
             }
+            
             
             showContextMenu(x, y, node) {
                 this.contextMenuNode = node;
@@ -1736,7 +1764,8 @@ const GRAPH_DATA = {
                     cancelIsolateItem.style.display = 'none';
                 }
                 
-                // Position context menu
+                // Reset display style and show context menu
+                this.contextMenu.style.display = 'block'; // <-- Add this line
                 this.contextMenu.style.left = x + 'px';
                 this.contextMenu.style.top = y + 'px';
                 this.contextMenu.classList.remove('hidden');
@@ -1750,41 +1779,109 @@ const GRAPH_DATA = {
                     this.contextMenu.style.top = (y - rect.height) + 'px';
                 }
             }
+            hideCopySubmenu() {
+                document.getElementById('copy-submenu').classList.add('hidden');
+            }
+
             
-            hideContextMenu() {
-                this.contextMenu.classList.add('hidden');
+            // hideContextMenu() {
+            //     document.getElementById('context-menu').classList.add('hidden');
+            //     this.hideCopySubmenu();
+            //     this.contextMenuNode = null;
+            // }
+
+            showCopySubmenu(x, y, node) {
+                const submenu = document.getElementById('copy-submenu');
+                const displayLabel = node.display_label || node.label;
+                
+                // Parse the label to extract key-value pairs
+                const labelPairs = this.parseLabelComponents(displayLabel);
+                
+                // Clear existing submenu items
+                submenu.innerHTML = '';
+                
+                // Create submenu items for each label component
+                labelPairs.forEach(pair => {
+                    const item = document.createElement('div');
+                    item.className = 'context-menu-item';
+                    item.textContent = pair.key;
+                    item.style.fontSize = '13px';
+                    
+                    // Use addEventListener instead of onclick for better control
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        
+                        this.copyToClipboard(pair.value);
+                        
+                        // Set a flag and hide menus
+                        this.submenuClosing = true;
+                        this.forceHideAllMenus();
+                    });
+                    
+                    submenu.appendChild(item);
+                });
+                
+                // Position submenu and show it
+                submenu.style.display = 'block';  // <-- Add this
+                submenu.style.left = x + 'px';
+                submenu.style.top = y + 'px';
+                submenu.classList.remove('hidden');
+                
+                // Ensure submenu stays within viewport
+                const rect = submenu.getBoundingClientRect();
+                if (rect.right > window.innerWidth) {
+                    submenu.style.left = (x - rect.width) + 'px';
+                }
+                if (rect.bottom > window.innerHeight) {
+                    submenu.style.top = (y - rect.height) + 'px';
+                }
+                
+                console.log('Submenu should be visible now'); // <-- Add this for debugging
+            }
+            
+            forceHideAllMenus() {
+                const contextMenu = document.getElementById('context-menu');
+                const submenu = document.getElementById('copy-submenu');
+                
+                // Force hide both menus
+                contextMenu.classList.add('hidden');
+                contextMenu.style.display = 'none';
+                submenu.classList.add('hidden');
+                submenu.style.display = 'none';
+                
                 this.contextMenuNode = null;
             }
-            
-            isolateNode(node) {
-                this.isolatedNode = node;
-                console.log(`Isolated node: ${node.label || node.id}`);
-                this.render(); // Re-render to apply isolation effects
+            parseLabelComponents(displayLabel) {
+                const lines = displayLabel.split('\n');
+                const pairs = [];
+                
+                lines.forEach(line => {
+                    const colonIndex = line.indexOf(':');
+                    if (colonIndex !== -1) {
+                        const key = line.substring(0, colonIndex).trim();
+                        const value = line.substring(colonIndex + 1).trim();
+                        pairs.push({ key, value });
+                    }
+                });
+                
+                return pairs;
             }
-            
-            cancelIsolation() {
-                this.isolatedNode = null;
-                console.log('Isolation cancelled');
-                this.render(); // Re-render to remove isolation effects
-            }
-            
-            copyNodeLabel(node) {
-                // Copy only the label (or id) of the specific node
-                const label = node.display_label || node.label;
 
+            copyToClipboard(text) {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(label).then(() => {
-                        console.log('Node label copied to clipboard');
-                        this.showCopyFeedback();
+                    navigator.clipboard.writeText(text).then(() => {
+                        console.log('Copied to clipboard:', text);
+                        this.showCopyFeedback(`Copied: ${text}`);
                     }).catch(err => {
                         console.error('Failed to copy to clipboard:', err);
-                        this.fallbackCopyToClipboard(label);
+                        this.fallbackCopyToClipboard(text);
                     });
                 } else {
-                    this.fallbackCopyToClipboard(label);
+                    this.fallbackCopyToClipboard(text);
                 }
             }
-            
+
             fallbackCopyToClipboard(text) {
                 const textArea = document.createElement('textarea');
                 textArea.value = text;
@@ -1806,8 +1903,8 @@ const GRAPH_DATA = {
                 
                 document.body.removeChild(textArea);
             }
-            
-            showCopyFeedback() {
+
+           showCopyFeedback() {
                 // Create temporary feedback element
                 const feedback = document.createElement('div');
                 feedback.textContent = 'Labels copied to clipboard!';
@@ -1835,6 +1932,41 @@ const GRAPH_DATA = {
                         document.body.removeChild(feedback);
                     }
                 }, 2000);
+            }
+
+            hideContextMenu() {
+                const contextMenu = document.getElementById('context-menu');
+                contextMenu.classList.add('hidden');
+                contextMenu.style.display = 'none';
+                this.contextMenuNode = null;
+            }
+            isolateNode(node) {
+                this.isolatedNode = node;
+                console.log(`Isolated node: ${node.label || node.id}`);
+                this.render(); // Re-render to apply isolation effects
+            }
+            
+            cancelIsolation() {
+                this.isolatedNode = null;
+                console.log('Isolation cancelled');
+                this.render(); // Re-render to remove isolation effects
+            }
+            
+            copyNodeLabel(node) {
+                // Copy only the label (or id) of the specific node
+                const label = node.display_label || node.label;
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(label).then(() => {
+                        console.log('Node label copied to clipboard');
+                        this.showCopyFeedback();
+                    }).catch(err => {
+                        console.error('Failed to copy to clipboard:', err);
+                        this.fallbackCopyToClipboard(label);
+                    });
+                } else {
+                    this.fallbackCopyToClipboard(label);
+                }
             }
             
             getTestNodes() {
@@ -4097,8 +4229,6 @@ const GRAPH_DATA = {
 
             // Helper: get current graph context as a summary string
             getGraphContext() {
-                console.log('hiiii');
-
                 // Serialize the full graph data as JSON
                 const context = JSON.stringify(GRAPH_DATA, null, 2);
                 console.log('Graph context JSON:', context);
