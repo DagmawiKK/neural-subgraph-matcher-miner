@@ -57,20 +57,55 @@ def vec_hash(v):
     #v = [np.sum(v) for mask in cached_masks]
     return v
 
-def wl_hash(g, dim=64, node_anchored=False):
+def wl_hash(g, dim=64, node_anchored=False, use_labels=False, label_key="label"):
+    """
+    Enhanced Weisfeiler-Lehman hashing with optional label consideration.
+    
+    Args:
+        g: NetworkX graph
+        dim: Hash dimension
+        node_anchored: Whether to consider anchor information
+        use_labels: Whether to include node labels in hash
+        label_key: Node attribute key for labels
+        
+    Returns:
+        Hash tuple representing the graph structure and optionally content
+    """
     g = nx.convert_node_labels_to_integers(g)
     vecs = np.zeros((len(g), dim), dtype=int)
+    
+    # Initialize vectors with anchor information
     if node_anchored:
         for v in g.nodes:
-            if g.nodes[v]["anchor"] == 1:
+            if g.nodes[v].get("anchor", 0) == 1:
                 vecs[v] = 1
                 break
+    
+    # Initialize vectors with label information if enabled
+    if use_labels:
+        for v in g.nodes:
+            if label_key in g.nodes[v]:
+                label = str(g.nodes[v][label_key])
+                # Use hash of label to initialize vector
+                label_hash = hash(label) % dim
+                vecs[v][label_hash % dim] = 1
+    
+    # Weisfeiler-Lehman iterations
     for i in range(len(g)):
         newvecs = np.zeros((len(g), dim), dtype=int)
         for n in g.nodes:
-            newvecs[n] = vec_hash(np.sum(vecs[list(g.neighbors(n)) + [n]],
-                axis=0))
+            # Aggregate neighborhood information
+            neighbor_sum = np.sum(vecs[list(g.neighbors(n)) + [n]], axis=0)
+            
+            # Include label information in hash if enabled
+            if use_labels and label_key in g.nodes[n]:
+                label = str(g.nodes[n][label_key])
+                label_contribution = hash(label + str(i)) % 1000  # Include iteration for uniqueness
+                neighbor_sum = neighbor_sum + label_contribution
+            
+            newvecs[n] = vec_hash(neighbor_sum)
         vecs = newvecs
+    
     return tuple(np.sum(vecs, axis=0))
 
 def gen_baseline_queries_rand_esu(queries, targets, node_anchored=False):
@@ -229,13 +264,17 @@ def build_optimizer(args, params):
     return scheduler, optimizer
 
 
-def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
+def standardize_graph(graph: nx.Graph, anchor: int = None, label_key: str = "label", 
+                     preserve_labels: bool = True) -> nx.Graph:
     """
     Standardize graph attributes to ensure compatibility with DeepSnap.
+    Enhanced to handle label attributes for content-aware pattern differentiation.
     
     Args:
         graph: Input NetworkX graph
         anchor: Optional anchor node index
+        label_key: Node attribute key to use as label (default: "label")
+        preserve_labels: Whether to preserve and validate label information
         
     Returns:
         NetworkX graph with standardized attributes
@@ -285,10 +324,37 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         elif 'node_feature' not in node_data:
             # Default feature if no anchor specified
             node_data['node_feature'] = torch.tensor([1.0])
-            
-        # Ensure label exists
-        if 'label' not in node_data:
-            node_data['label'] = str(node)
+        
+        # Handle label attributes with validation and type conversion
+        if preserve_labels:
+            if label_key in node_data:
+                # Validate and convert label to string
+                original_label = node_data[label_key]
+                try:
+                    # Convert to string, handling various types
+                    if isinstance(original_label, (int, float)):
+                        node_data[label_key] = str(original_label)
+                    elif isinstance(original_label, str):
+                        node_data[label_key] = original_label.strip()
+                    else:
+                        # For other types, convert to string representation
+                        node_data[label_key] = str(original_label)
+                        
+                    # Handle empty or invalid labels
+                    if not node_data[label_key] or node_data[label_key].isspace():
+                        node_data[label_key] = f"node_{node}"
+                        
+                except (ValueError, TypeError) as e:
+                    # Fallback for malformed labels
+                    node_data[label_key] = f"node_{node}"
+                    print(f"Warning: Invalid label for node {node}, using fallback: {e}")
+            else:
+                # Add default label if missing
+                node_data[label_key] = f"node_{node}"
+        else:
+            # Ensure default label exists for backward compatibility
+            if 'label' not in node_data:
+                node_data['label'] = str(node)
             
         # Ensure id exists
         if 'id' not in node_data:
@@ -299,21 +365,53 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
 
 
 
-def batch_nx_graphs(graphs, anchors=None):
-
-
+def batch_nx_graphs(graphs, anchors=None, enable_labels=False, label_key="label", 
+                   max_label_vocab_size=1000):
+    """
+    Enhanced batching with optional label processing for content-aware pattern differentiation.
+    
+    Args:
+        graphs: List of NetworkX graphs
+        anchors: Optional anchor nodes
+        enable_labels: Whether to process node labels
+        label_key: Node attribute key for labels
+        max_label_vocab_size: Maximum label vocabulary size
+        
+    Returns:
+        Batched graphs with optional label features
+    """
     # Initialize feature augmenter
     augmenter = feature_preprocess.FeatureAugment()
+    
+    # Enable label features if requested
+    if enable_labels:
+        try:
+            # Build label vocabulary from all graphs
+            label_dim = augmenter.enable_label_features(
+                graphs, label_key=label_key, max_vocab_size=max_label_vocab_size
+            )
+            print(f"Label processing enabled: vocabulary size={label_dim}, key='{label_key}'")
+            
+            # Get label statistics for logging
+            label_stats = augmenter.get_label_stats()
+            if label_stats:
+                print(f"Label statistics: {label_stats['vocab_size']} unique labels, "
+                      f"{label_stats['total_labels']} total labels detected")
+                
+        except Exception as e:
+            print(f"Warning: Failed to enable label features: {str(e)}")
+            print("Falling back to structure-only mode")
+            enable_labels = False
     
     # Process graphs with proper attribute handling
     processed_graphs = []
     for i, graph in enumerate(graphs):
         anchor = anchors[i] if anchors is not None else None
         try:
-            # Standardize graph attributes
-
-
-            std_graph = standardize_graph(graph, anchor)
+            # Standardize graph attributes with label support
+            std_graph = standardize_graph(
+                graph, anchor, label_key=label_key, preserve_labels=enable_labels
+            )
             
             # Convert to DeepSnap format
             ds_graph = DSGraph(std_graph)
@@ -328,6 +426,8 @@ def batch_nx_graphs(graphs, anchors=None):
             minimal_graph.add_edges_from(graph.edges())
             for node in minimal_graph.nodes():
                 minimal_graph.nodes[node]['node_feature'] = torch.tensor([1.0])
+                if enable_labels:
+                    minimal_graph.nodes[node][label_key] = f"node_{node}"
             processed_graphs.append(DSGraph(minimal_graph))
     
     # Create batch

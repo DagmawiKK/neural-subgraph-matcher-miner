@@ -53,7 +53,7 @@ class SearchAgent:
     """
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, model_type="order",
-        out_batch_size=20):
+        out_batch_size=20, use_labels=False, label_key="label"):
         """ Subgraph pattern search by walking in embedding space.
 
         Args:
@@ -69,6 +69,8 @@ class SearchAgent:
             model_type: type of the subgraph matching model (requires to be consistent with the model parameter).
             out_batch_size: the number of frequent subgraphs output by the mining algorithm for each size.
                 They are predicted to be the out_batch_size most frequent subgraphs in the dataset.
+            use_labels: whether to enable label-aware pattern differentiation.
+            label_key: node attribute key to use as label for content-aware hashing.
         """
         self.min_pattern_size = min_pattern_size
         self.max_pattern_size = max_pattern_size
@@ -79,6 +81,8 @@ class SearchAgent:
         self.analyze = analyze
         self.model_type = model_type
         self.out_batch_size = out_batch_size
+        self.use_labels = use_labels
+        self.label_key = label_key
 
     def run_search(self, n_trials=1000): 
         self.cand_patterns = defaultdict(list)
@@ -104,16 +108,19 @@ class SearchAgent:
 class MCTSSearchAgent(SearchAgent):
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, model_type="order",
-        out_batch_size=20, c_uct=0.7):
+        out_batch_size=20, c_uct=0.7, use_labels=False, label_key="label"):
         """ MCTS implementation of the subgraph pattern search.
         Uses MCTS strategy to search for the most common pattern.
 
         Args:
             c_uct: the exploration constant used in UCT criteria (See paper).
+            use_labels: whether to enable label-aware pattern differentiation.
+            label_key: node attribute key to use as label for content-aware hashing.
         """
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
-            model_type=model_type, out_batch_size=out_batch_size)
+            model_type=model_type, out_batch_size=out_batch_size,
+            use_labels=use_labels, label_key=label_key)
         self.c_uct = c_uct
         assert not analyze
 
@@ -207,7 +214,9 @@ class MCTSSearchAgent(SearchAgent):
                     for v in neigh_g.nodes:
                         neigh_g.nodes[v]["anchor"] = 1 if v == neigh[0] else 0
                     next_state = utils.wl_hash(neigh_g,
-                        node_anchored=self.node_anchored)
+                        node_anchored=self.node_anchored,
+                        use_labels=getattr(self, 'use_labels', False),
+                        label_key=getattr(self, 'label_key', 'label'))
                     # compute node score
                     parent_visit_counts = sum(self.visit_counts[cur_state].values())
                     my_visit_counts = sum(self.visit_counts[next_state].values())
@@ -232,7 +241,9 @@ class MCTSSearchAgent(SearchAgent):
                 for v in neigh_g.nodes:
                     neigh_g.nodes[v]["anchor"] = 1 if v == neigh[0] else 0
                 prev_state = cur_state
-                cur_state = utils.wl_hash(neigh_g, node_anchored=self.node_anchored)
+                cur_state = utils.wl_hash(neigh_g, node_anchored=self.node_anchored, 
+                                         use_labels=getattr(self, 'use_labels', False),
+                                         label_key=getattr(self, 'label_key', 'label'))
                 state_list.append(cur_state)
                 self.wl_hash_to_graphs[cur_state].append(neigh_g)
 
@@ -358,7 +369,9 @@ def run_greedy_trial(trial_idx):
                 neigh_g.nodes[v]["anchor"] = 1 if worker_args.node_anchored and v == neigh[0] else 0
 
             trial_patterns[len(neigh_g)].append((best_score, neigh_g))
-            trial_counts[len(neigh_g)][utils.wl_hash(neigh_g, node_anchored=worker_args.node_anchored)].append(neigh_g)
+            trial_counts[len(neigh_g)][utils.wl_hash(neigh_g, node_anchored=worker_args.node_anchored,
+                                                    use_labels=getattr(worker_args, 'use_node_labels', False),
+                                                    label_key=getattr(worker_args, 'node_label_key', 'label'))].append(neigh_g)
             
     return trial_patterns, trial_counts
 
@@ -367,13 +380,16 @@ def run_greedy_trial(trial_idx):
 class GreedySearchAgent(SearchAgent):
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, rank_method="counts",
-        model_type="order", out_batch_size=20, n_beams=1, n_workers=4):
+        model_type="order", out_batch_size=20, n_beams=1, n_workers=4,
+        use_labels=False, label_key="label"):
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
-            model_type=model_type, out_batch_size=out_batch_size)
+            model_type=model_type, out_batch_size=out_batch_size,
+            use_labels=use_labels, label_key=label_key)
         self.rank_method = rank_method
         self.n_beams = n_beams
         self.n_workers = n_workers
+        self.args = None  # Will be set when run_search is called
         print("Rank Method:", rank_method)
         if self.n_workers > 1:
             print(f"Using {self.n_workers} worker processes for parallel search.")
@@ -430,7 +446,9 @@ class GreedySearchAgent(SearchAgent):
                 cands = self.cand_patterns[pattern_size]
                 cand_patterns_uniq_size = []
                 for score, pattern in sorted(cands, key=lambda x: x[0]):
-                    wl_hash = utils.wl_hash(pattern, node_anchored=self.node_anchored)
+                    wl_hash = utils.wl_hash(pattern, node_anchored=self.node_anchored,
+                                           use_labels=getattr(self, 'use_labels', False),
+                                           label_key=getattr(self, 'label_key', 'label'))
                     if wl_hash not in wl_hashes:
                         wl_hashes.add(wl_hash)
                         cand_patterns_uniq_size.append(pattern)
@@ -450,11 +468,13 @@ class GreedySearchAgent(SearchAgent):
 class MemoryEfficientGreedyAgent(GreedySearchAgent):
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, rank_method="counts",
-        model_type="order", out_batch_size=20, batch_size=64):
+        model_type="order", out_batch_size=20, batch_size=64,
+        use_labels=False, label_key="label"):
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
             rank_method=rank_method, model_type=model_type,
-            out_batch_size=out_batch_size)
+            out_batch_size=out_batch_size, use_labels=use_labels, 
+            label_key=label_key)
         self.batch_size = batch_size
         self.use_fp16 = torch.cuda.is_available()
         
@@ -528,7 +548,9 @@ class MemoryEfficientGreedyAgent(GreedySearchAgent):
             self.cand_patterns[len(pattern)].append((best_score, pattern))
             if self.rank_method in ["counts", "hybrid"]:
                 self.counts[len(pattern)][utils.wl_hash(pattern,
-                    node_anchored=self.node_anchored)].append(pattern)
+                    node_anchored=self.node_anchored,
+                    use_labels=getattr(self, 'use_labels', False),
+                    label_key=getattr(self, 'label_key', 'label'))].append(pattern)
             
             return pattern
         return None
@@ -577,10 +599,12 @@ class MemoryEfficientMCTSAgent(MCTSSearchAgent):
     
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, model_type="order",
-        out_batch_size=20, c_uct=0.7, memory_limit=1000000):
+        out_batch_size=20, c_uct=0.7, memory_limit=1000000,
+        use_labels=False, label_key="label"):
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
-            model_type=model_type, out_batch_size=out_batch_size, c_uct=c_uct)
+            model_type=model_type, out_batch_size=out_batch_size, c_uct=c_uct,
+            use_labels=use_labels, label_key=label_key)
         self.memory_limit = memory_limit
         self.wl_hash_to_graphs = self._create_lru_cache(maxsize=10000)
         self.use_fp16 = torch.cuda.is_available()
@@ -696,7 +720,9 @@ class MemoryEfficientMCTSAgent(MCTSSearchAgent):
                 if len(neigh) >= self.min_pattern_size:
                     pattern = graph.subgraph(neigh).copy()
                     pattern_hash = utils.wl_hash(pattern,
-                        node_anchored=self.node_anchored)
+                        node_anchored=self.node_anchored,
+                        use_labels=getattr(self, 'use_labels', False),
+                        label_key=getattr(self, 'label_key', 'label'))
                     self.visit_counts[len(pattern)][pattern_hash] += 1
                     
             self.max_size += 1
@@ -929,7 +955,9 @@ class BeamSearchAgent(SearchAgent):
             self.cand_patterns[len(pattern)].append((score, pattern))
             
             # Track pattern counts by WL hash
-            pattern_hash = utils.wl_hash(pattern, node_anchored=self.node_anchored)
+            pattern_hash = utils.wl_hash(pattern, node_anchored=self.node_anchored,
+                                        use_labels=getattr(self, 'use_labels', False),
+                                        label_key=getattr(self, 'label_key', 'label'))
             self.pattern_counts[len(pattern)][pattern_hash].append(pattern)
             
             # Save embedding for analysis if needed

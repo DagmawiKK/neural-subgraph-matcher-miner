@@ -82,13 +82,36 @@ class OTFSynDataSource(DataSource):
     DeepSNAP transforms are used to generate the positive and negative examples.
     """
     def __init__(self, max_size=29, min_size=5, n_workers=4,
-        max_queue_size=256, node_anchored=False):
+        max_queue_size=256, node_anchored=False, use_node_labels=False,
+        node_label_key="label", max_label_vocab_size=1000, label_types=None):
         self.closed = False
         self.max_size = max_size
         self.min_size = min_size
         self.node_anchored = node_anchored
+        self.use_node_labels = use_node_labels
+        self.node_label_key = node_label_key
+        self.max_label_vocab_size = max_label_vocab_size
+        
+        # Define label types for synthetic graph generation
+        if label_types is None:
+            self.label_types = ['A', 'B', 'C', 'D', 'E']  # Default synthetic labels
+        else:
+            self.label_types = label_types
+            
         self.generator = combined_syn.get_generator(np.arange(
             self.min_size + 1, self.max_size + 1))
+
+    def _assign_synthetic_labels(self, graph):
+        """Assign synthetic labels to nodes in a graph."""
+        if not self.use_node_labels:
+            return graph
+            
+        # Assign random labels to nodes
+        for node in graph.nodes():
+            label = random.choice(self.label_types)
+            graph.nodes[node][self.node_label_key] = label
+            
+        return graph
 
     def gen_data_loaders(self, size, batch_size, train=True,
         use_distributed_sampling=False):
@@ -173,18 +196,44 @@ class OTFSynDataSource(DataSource):
             return graph, DSGraph(neigh)
 
         augmenter = feature_preprocess.FeatureAugment()
+        
+        # Enable label features in augmenter if configured
+        if self.use_node_labels:
+            augmenter.enable_label_features(
+                label_key=self.node_label_key,
+                max_vocab_size=self.max_label_vocab_size
+            )
 
         pos_target = batch_target
+        
+        # Assign labels to synthetic graphs if enabled
+        if self.use_node_labels:
+            pos_target = pos_target.apply_transform(lambda g: DSGraph(self._assign_synthetic_labels(g.G)))
+        
         pos_target, pos_query = pos_target.apply_transform_multi(sample_subgraph)
         neg_target = batch_neg_target
+        
+        # Assign labels to negative target graphs if enabled
+        if self.use_node_labels:
+            neg_target = neg_target.apply_transform(lambda g: DSGraph(self._assign_synthetic_labels(g.G)))
+        
         # TODO: use hard negs
         hard_neg_idxs = set(random.sample(range(len(neg_target.G)),
             int(len(neg_target.G) * 1/2)))
         #hard_neg_idxs = set()
-        batch_neg_query = Batch.from_data_list(
-            [DSGraph(self.generator.generate(size=len(g))
-                if i not in hard_neg_idxs else g)
-                for i, g in enumerate(neg_target.G)])
+        
+        # Generate negative query graphs and assign labels
+        neg_query_graphs = []
+        for i, g in enumerate(neg_target.G):
+            if i not in hard_neg_idxs:
+                synthetic_graph = self.generator.generate(size=len(g))
+                if self.use_node_labels:
+                    synthetic_graph = self._assign_synthetic_labels(synthetic_graph)
+                neg_query_graphs.append(DSGraph(synthetic_graph))
+            else:
+                neg_query_graphs.append(DSGraph(g))
+        
+        batch_neg_query = Batch.from_data_list(neg_query_graphs)
         for i, g in enumerate(batch_neg_query.G):
             g.graph["idx"] = i
         _, neg_query = batch_neg_query.apply_transform_multi(sample_subgraph,
@@ -218,9 +267,12 @@ class OTFSynImbalancedDataSource(OTFSynDataSource):
     This setting is a challenging model inference scenario.
     """
     def __init__(self, max_size=29, min_size=5, n_workers=4,
-        max_queue_size=256, node_anchored=False):
+        max_queue_size=256, node_anchored=False, use_node_labels=False,
+        node_label_key="label", max_label_vocab_size=1000, label_types=None):
         super().__init__(max_size=max_size, min_size=min_size,
-            n_workers=n_workers, node_anchored=node_anchored)
+            n_workers=n_workers, node_anchored=node_anchored,
+            use_node_labels=use_node_labels, node_label_key=node_label_key,
+            max_label_vocab_size=max_label_vocab_size, label_types=label_types)
         self.batch_idx = 0
 
     def gen_batch(self, graphs_a, graphs_b, _, train):
@@ -273,11 +325,49 @@ class DiskDataSource(DataSource):
     See the load_dataset function for supported datasets.
     """
     def __init__(self, dataset_name, node_anchored=False, min_size=5,
-        max_size=29):
+        max_size=29, use_node_labels=False, node_label_key="label", 
+        max_label_vocab_size=1000):
         self.node_anchored = node_anchored
         self.dataset = load_dataset(dataset_name)
         self.min_size = min_size
         self.max_size = max_size
+        self.use_node_labels = use_node_labels
+        self.node_label_key = node_label_key
+        self.max_label_vocab_size = max_label_vocab_size
+        
+        # Detect labels from dataset if enabled
+        if self.use_node_labels:
+            self._detect_labels_from_dataset()
+
+    def _detect_labels_from_dataset(self):
+        """Detect and validate node labels in the dataset."""
+        train_set, test_set, _ = self.dataset
+        all_graphs = train_set + test_set
+        
+        # Sample a few graphs to check for labels
+        sample_size = min(10, len(all_graphs))
+        sample_graphs = random.sample(all_graphs, sample_size)
+        
+        labels_found = False
+        label_counts = {}
+        
+        for graph in sample_graphs:
+            for node in graph.nodes():
+                node_data = graph.nodes[node]
+                if self.node_label_key in node_data:
+                    labels_found = True
+                    label = str(node_data[self.node_label_key])
+                    label_counts[label] = label_counts.get(label, 0) + 1
+        
+        if not labels_found:
+            print(f"Warning: No node labels found with key '{self.node_label_key}' in dataset. "
+                  f"Falling back to structure-only mode.")
+            self.use_node_labels = False
+        else:
+            print(f"Detected {len(label_counts)} unique labels in dataset: {list(label_counts.keys())[:10]}...")
+            if len(label_counts) > self.max_label_vocab_size:
+                print(f"Warning: Found {len(label_counts)} labels, but max vocabulary size is "
+                      f"{self.max_label_vocab_size}. Most frequent labels will be used.")
 
     def gen_data_loaders(self, size, batch_size, train=True,
         use_distributed_sampling=False):
@@ -341,13 +431,17 @@ class DiskDataSource(DataSource):
             neg_b.append(neigh_b)
 
         pos_a = utils.batch_nx_graphs(pos_a, anchors=pos_a_anchors if
-            self.node_anchored else None)
+            self.node_anchored else None, enable_labels=self.use_node_labels,
+            label_key=self.node_label_key, max_label_vocab_size=self.max_label_vocab_size)
         pos_b = utils.batch_nx_graphs(pos_b, anchors=pos_b_anchors if
-            self.node_anchored else None)
+            self.node_anchored else None, enable_labels=self.use_node_labels,
+            label_key=self.node_label_key, max_label_vocab_size=self.max_label_vocab_size)
         neg_a = utils.batch_nx_graphs(neg_a, anchors=neg_a_anchors if
-            self.node_anchored else None)
+            self.node_anchored else None, enable_labels=self.use_node_labels,
+            label_key=self.node_label_key, max_label_vocab_size=self.max_label_vocab_size)
         neg_b = utils.batch_nx_graphs(neg_b, anchors=neg_b_anchors if
-            self.node_anchored else None)
+            self.node_anchored else None, enable_labels=self.use_node_labels,
+            label_key=self.node_label_key, max_label_vocab_size=self.max_label_vocab_size)
         return pos_a, pos_b, neg_a, neg_b
 
 class DiskImbalancedDataSource(OTFSynDataSource):
@@ -360,9 +454,12 @@ class DiskImbalancedDataSource(OTFSynDataSource):
     This setting is a challenging model inference scenario.
     """
     def __init__(self, dataset_name, max_size=29, min_size=5, n_workers=4,
-        max_queue_size=256, node_anchored=False):
+        max_queue_size=256, node_anchored=False, use_node_labels=False,
+        node_label_key="label", max_label_vocab_size=1000, label_types=None):
         super().__init__(max_size=max_size, min_size=min_size,
-            n_workers=n_workers, node_anchored=node_anchored)
+            n_workers=n_workers, node_anchored=node_anchored,
+            use_node_labels=use_node_labels, node_label_key=node_label_key,
+            max_label_vocab_size=max_label_vocab_size, label_types=label_types)
         self.batch_idx = 0
         self.dataset = load_dataset(dataset_name)
         self.train_set, self.test_set, _ = self.dataset
