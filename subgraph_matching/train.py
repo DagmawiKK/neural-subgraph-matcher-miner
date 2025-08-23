@@ -39,7 +39,7 @@ else:
     from subgraph_matching.config import parse_encoder
 from subgraph_matching.test import validation
 
-def build_model(args):
+def build_model(args, actual_label_dim=None):
     # Calculate input dimension based on configuration
     input_dim = 1  # Base dimension for structural features
     
@@ -47,15 +47,17 @@ def build_model(args):
         # Add label encoding dimension
         if args.label_encoding_dim is not None:
             input_dim += args.label_encoding_dim
+        elif actual_label_dim is not None:
+            # Use the actual detected label dimension
+            input_dim += actual_label_dim
         else:
-            # Auto-detect label encoding dimension based on vocabulary size
-            # Use a reasonable default based on max vocabulary size
+            # Fallback to max vocabulary size estimation
             if args.max_label_vocab_size <= 10:
                 input_dim += args.max_label_vocab_size  # One-hot encoding
             else:
                 input_dim += min(64, args.max_label_vocab_size)  # Embedding dimension
     
-    print(f"Building model with input dimension: {input_dim} (labels: {args.use_node_labels})")
+    print(f"Building model with input dimension: {input_dim} (labels: {args.use_node_labels}, actual_label_dim: {actual_label_dim})")
     
     # build model
     if args.method_type == "order":
@@ -178,7 +180,39 @@ def train_loop(args):
         for k, v in sorted(vars(args).items()) if k in record_keys])
     logger = SummaryWriter(comment=args_str)
 
-    model = build_model(args)
+    # Initialize global feature augmentation state and detect actual label dimension
+    actual_label_dim = None
+    if args.use_node_labels:
+        print("Initializing global label feature state...")
+        from common import feature_preprocess
+        temp_augmenter = feature_preprocess.FeatureAugment()
+        
+        # Create sample data to initialize label vocabulary
+        temp_data_source = make_data_source(args)
+        if hasattr(temp_data_source, '_assign_synthetic_labels'):
+            # For synthetic data sources
+            sample_graphs = []
+            for _ in range(5):
+                sample_graph = temp_data_source.generator.generate(size=random.randint(temp_data_source.min_size, temp_data_source.max_size))
+                sample_graph = temp_data_source._assign_synthetic_labels(sample_graph)
+                sample_graphs.append(sample_graph)
+            actual_label_dim = temp_augmenter.enable_label_features(
+                graphs=sample_graphs,
+                label_key=args.node_label_key,
+                max_vocab_size=args.max_label_vocab_size
+            )
+        else:
+            # For disk data sources, use a few graphs from the dataset
+            train_set, _, _ = temp_data_source.dataset
+            sample_graphs = train_set[:min(5, len(train_set))]
+            actual_label_dim = temp_augmenter.enable_label_features(
+                graphs=sample_graphs,
+                label_key=args.node_label_key,
+                max_vocab_size=args.max_label_vocab_size
+            )
+        print(f"Global label features initialized with vocabulary size: {actual_label_dim}")
+
+    model = build_model(args, actual_label_dim=actual_label_dim)
     model.share_memory()
 
     if args.method_type == "order":
