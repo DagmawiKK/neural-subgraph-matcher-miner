@@ -1,4 +1,5 @@
 import argparse
+from common.config_utils import validate_label_config_compatibility, check_backward_compatibility
 
 def parse_decoder(parser):
     dec_parser = parser.add_argument_group()
@@ -55,6 +56,16 @@ def parse_decoder(parser):
     dec_parser.add_argument('--graph_type', type=str,
         help='"directed" or "undirected" graph type')
     
+    # Node label configuration arguments
+    dec_parser.add_argument('--use_node_labels', action="store_true",
+                        help='Enable node label features for content-aware pattern differentiation')
+    dec_parser.add_argument('--node_label_key', type=str, default="label",
+                        help='Node attribute key to use as label (default: "label")')
+    dec_parser.add_argument('--max_label_vocab_size', type=int, default=1000,
+                        help='Maximum label vocabulary size (default: 1000)')
+    dec_parser.add_argument('--label_encoding_dim', type=int, default=None,
+                        help='Dimension for label encoding (auto-detected if None)')
+    
     # Set default values
     parser.set_defaults(
         # Dataset defaults
@@ -78,5 +89,34 @@ def parse_decoder(parser):
         search_strategy="greedy",
         out_batch_size=10,
         node_anchored=True,
-        memory_limit=1000000
+        memory_limit=1000000,
+        use_node_labels=False,
+        node_label_key="label",
+        max_label_vocab_size=1000,
+        label_encoding_dim=None
     )
+
+
+def parse_and_validate_decoder(arg_str=None):
+    """
+    Parse decoder arguments and validate configuration.
+    
+    Args:
+        arg_str: Optional argument string for testing
+        
+    Returns:
+        Parsed and validated arguments
+    """
+    parser = argparse.ArgumentParser()
+    parse_decoder(parser)
+    args = parser.parse_args(arg_str)
+    
+    # Validate label configuration
+    if not validate_label_config_compatibility(args):
+        raise ValueError("Invalid label configuration")
+    
+    # Check backward compatibility
+    if not check_backward_compatibility(args):
+        raise ValueError("Configuration breaks backward compatibility")
+    
+    return args

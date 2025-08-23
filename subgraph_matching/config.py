@@ -1,5 +1,6 @@
 import argparse
 from common import utils
+from common.config_utils import validate_label_config_compatibility, check_backward_compatibility
 
 def parse_encoder(parser, arg_str=None):
     enc_parser = parser.add_argument_group()
@@ -41,6 +42,16 @@ def parse_encoder(parser, arg_str=None):
     enc_parser.add_argument('--n_workers', type=int)
     enc_parser.add_argument('--tag', type=str,
         help='tag to identify the run')
+    
+    # Node label configuration arguments
+    enc_parser.add_argument('--use_node_labels', action="store_true",
+                        help='Enable node label features for content-aware pattern differentiation')
+    enc_parser.add_argument('--node_label_key', type=str, default="label",
+                        help='Node attribute key to use as label (default: "label")')
+    enc_parser.add_argument('--max_label_vocab_size', type=int, default=1000,
+                        help='Maximum label vocabulary size (default: 1000)')
+    enc_parser.add_argument('--label_encoding_dim', type=int, default=None,
+                        help='Dimension for label encoding (auto-detected if None)')
 
     enc_parser.set_defaults(conv_type='SAGE',
                         method_type='order',
@@ -63,7 +74,36 @@ def parse_encoder(parser, arg_str=None):
                         model_path="ckpt/model.pt",
                         tag='',
                         val_size=4096,
-                        node_anchored=True)
+                        node_anchored=True,
+                        use_node_labels=False,
+                        node_label_key="label",
+                        max_label_vocab_size=1000,
+                        label_encoding_dim=None)
 
     #return enc_parser.parse_args(arg_str)
+
+
+def parse_and_validate_encoder(arg_str=None):
+    """
+    Parse encoder arguments and validate configuration.
+    
+    Args:
+        arg_str: Optional argument string for testing
+        
+    Returns:
+        Parsed and validated arguments
+    """
+    parser = argparse.ArgumentParser()
+    parse_encoder(parser, arg_str)
+    args = parser.parse_args(arg_str)
+    
+    # Validate label configuration
+    if not validate_label_config_compatibility(args):
+        raise ValueError("Invalid label configuration")
+    
+    # Check backward compatibility
+    if not check_backward_compatibility(args):
+        raise ValueError("Configuration breaks backward compatibility")
+    
+    return args
 

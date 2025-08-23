@@ -24,7 +24,6 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-
       - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
@@ -35,27 +34,16 @@ jobs:
             type=local,src=/tmp/.buildx-cache
           cache-to: |
             type=local,dest=/tmp/.buildx-cache-new,mode=max
-
       - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
       - name: Create output directories
         run: |
           mkdir -p ${{ github.workspace }}/plots/cluster
           mkdir -p ${{ github.workspace }}/results
           chmod -R 777 ${{ github.workspace }}/plots
           chmod -R 777 ${{ github.workspace }}/results
-
-      - name: Copy chatbot server files to plots
-        run: |
-          cp visualizer/requirements.txt ${{ github.workspace }}/plots/
-          cp visualizer/chatbot_server.py ${{ github.workspace }}/plots/
-          cp visualizer/run_server.sh ${{ github.workspace }}/plots/
-          cp visualizer/README.md ${{ github.workspace }}/plots/
-          chmod +x ${{ github.workspace }}/plots/run_server.sh
-
       - name: Check available processors and usage percentage
         id: cpu-check
         run: |
@@ -67,8 +55,7 @@ jobs:
           echo "Percent of processors used: ${PERCENT_USED}%"
           echo "total_cpus=$TOTAL_CPUS" >> $GITHUB_OUTPUT
           echo "percent_used=$PERCENT_USED" >> $GITHUB_OUTPUT
-
-      - name: Run decoder in Docker container
+      - name: Run matcher in Docker container
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
@@ -76,52 +63,41 @@ jobs:
             decoder-image:latest \
             bash -c "
               set -e
-              echo 'Starting decoder run...'
-              python -m subgraph_mining.decoder \
-                --dataset=directed.pkl \
-                --n_trials=200 \
+              echo 'Starting matcher run on custom gene graph...'
+              python -m subgraph_matching.train \
+                --dataset=graph \
+                --graph_pkl_path=graph.pkl \
                 --node_anchored \
-                --out_path=/app/results/patterns.pkl \
-                --graph_type=directed
+                --batch_size 16 \
+                --val_size 128
               echo 'Checking output directories...'
-              ls -la /app/plots/cluster
               ls -la /app/results
-              "
-      # - name: Run pattern counter in Docker container
-      #   run: |
-      #     docker run --rm \
-      #       -v ${{ github.workspace }}:/app \
-      #       -e PYTHONUNBUFFERED=1 \
-      #       decoder-image:latest \
-      #       bash -c "
-      #         set -e
-      #         export PYTHONPATH=/app
-      #         echo 'Running pattern counter...'
-      #         python -m analyze.count_patterns \
-      #           --dataset=graph.pkl \
-      #           --queries_path=results/patterns.pkl \
-      #           --out_path=results/ \
-      #           --node_anchored \
-      #           --preserve_labels
-      #         echo 'Counting completed.'
-      #         ls -la /app/results
-      #       "
-
-      - name: Check for generated files
+              ls -la /app/plots
+            "
+      - name: Check for matcher outputs
         run: |
-          echo "Checking plots directory:"
-          ls -R plots/ || echo "No plots directory found"
-          echo "Checking results directory:"
-          ls -R results/ || echo "No results directory found"
-
-      - name: Upload plots as artifact
+          echo "Checking matcher outputs in results/ and plots/:"
+          ls -lh results/ || echo "No results directory found"
+          ls -lh plots/ || echo "No plots directory found"
+      - name: Upload matcher outputs as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: decoder-plots
+          name: matcher-results
           path: |
-            plots/
             results/
+            plots/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload trainer outputs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trainer-outputs
+          path: |
+            ckpt/
+            runs/
           retention-days: 7
           if-no-files-found: warn
 
