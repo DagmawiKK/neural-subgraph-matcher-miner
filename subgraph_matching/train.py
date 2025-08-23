@@ -40,11 +40,28 @@ else:
 from subgraph_matching.test import validation
 
 def build_model(args):
+    # Calculate input dimension based on configuration
+    input_dim = 1  # Base dimension for structural features
+    
+    if args.use_node_labels:
+        # Add label encoding dimension
+        if args.label_encoding_dim is not None:
+            input_dim += args.label_encoding_dim
+        else:
+            # Auto-detect label encoding dimension based on vocabulary size
+            # Use a reasonable default based on max vocabulary size
+            if args.max_label_vocab_size <= 10:
+                input_dim += args.max_label_vocab_size  # One-hot encoding
+            else:
+                input_dim += min(64, args.max_label_vocab_size)  # Embedding dimension
+    
+    print(f"Building model with input dimension: {input_dim} (labels: {args.use_node_labels})")
+    
     # build model
     if args.method_type == "order":
-        model = models.OrderEmbedder(1, args.hidden_dim, args)
+        model = models.OrderEmbedder(input_dim, args.hidden_dim, args)
     elif args.method_type == "mlp":
-        model = models.BaselineMLP(1, args.hidden_dim, args)
+        model = models.BaselineMLP(input_dim, args.hidden_dim, args)
     model.to(utils.get_device())
     if args.test and args.model_path:
         model.load_state_dict(torch.load(args.model_path,
@@ -56,19 +73,31 @@ def make_data_source(args):
     if toks[0] == "syn":
         if len(toks) == 1 or toks[1] == "balanced":
             data_source = data.OTFSynDataSource(
-                node_anchored=args.node_anchored)
+                node_anchored=args.node_anchored,
+                use_node_labels=args.use_node_labels,
+                node_label_key=args.node_label_key,
+                max_label_vocab_size=args.max_label_vocab_size)
         elif toks[1] == "imbalanced":
             data_source = data.OTFSynImbalancedDataSource(
-                node_anchored=args.node_anchored)
+                node_anchored=args.node_anchored,
+                use_node_labels=args.use_node_labels,
+                node_label_key=args.node_label_key,
+                max_label_vocab_size=args.max_label_vocab_size)
         else:
             raise Exception("Error: unrecognized dataset")
     else:
         if len(toks) == 1 or toks[1] == "balanced":
             data_source = data.DiskDataSource(toks[0],
-                node_anchored=args.node_anchored)
+                node_anchored=args.node_anchored,
+                use_node_labels=args.use_node_labels,
+                node_label_key=args.node_label_key,
+                max_label_vocab_size=args.max_label_vocab_size)
         elif toks[1] == "imbalanced":
             data_source = data.DiskImbalancedDataSource(toks[0],
-                node_anchored=args.node_anchored)
+                node_anchored=args.node_anchored,
+                use_node_labels=args.use_node_labels,
+                node_label_key=args.node_label_key,
+                max_label_vocab_size=args.max_label_vocab_size)
         else:
             raise Exception("Error: unrecognized dataset")
     return data_source
