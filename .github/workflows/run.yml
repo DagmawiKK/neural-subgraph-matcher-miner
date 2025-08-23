@@ -65,8 +65,6 @@ jobs:
               set -e
               echo 'Starting matcher run on custom gene graph...'
               python -m subgraph_matching.train \
-                --dataset=graph \
-                --graph_pkl_path=graph.pkl \
                 --node_anchored \
                 --batch_size 16 \
                 --val_size 128 \
