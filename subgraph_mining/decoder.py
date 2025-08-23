@@ -47,6 +47,8 @@ import torch.multiprocessing as mp
 from sklearn.decomposition import PCA
 
 import warnings 
+from neural_subgraph_dashboard.websocket_server import init_dashboard_server
+from subgraph_mining.dashboard_search_agent import DashboardGreedySearchAgent
 
 def bfs_chunk(graph, start_node, max_size):
     visited = set([start_node])
@@ -565,7 +567,15 @@ def pattern_growth(dataset, task, args):
                 model, graphs, embs, node_anchored=args.node_anchored,
                 analyze=args.analyze, out_batch_size=args.out_batch_size)
     elif args.search_strategy == "greedy":
-        if args.memory_efficient:
+        if getattr(args, "enable_dashboard", False):
+            # start WS server once
+            init_dashboard_server(port=getattr(args, "dashboard_port", 5000))
+            agent = DashboardGreedySearchAgent(args.min_pattern_size, args.max_pattern_size,
+                model, graphs, embs, node_anchored=args.node_anchored,
+                analyze=args.analyze, model_type=args.method_type,
+                out_batch_size=args.out_batch_size, n_beams=1,
+                n_workers=getattr(args, "n_workers", 1))
+        elif args.memory_efficient:
             agent = MemoryEfficientGreedyAgent(args.min_pattern_size, args.max_pattern_size,
                 model, graphs, embs, node_anchored=args.node_anchored,
                 analyze=args.analyze, model_type=args.method_type,
