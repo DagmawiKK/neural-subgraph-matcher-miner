@@ -199,7 +199,15 @@ class OTFSynDataSource(DataSource):
         
         # Enable label features in augmenter if configured
         if self.use_node_labels:
+            # Create sample graphs with labels for vocabulary building
+            sample_graphs = []
+            for _ in range(5):  # Create a few sample graphs
+                sample_graph = self.generator.generate(size=random.randint(self.min_size, self.max_size))
+                sample_graph = self._assign_synthetic_labels(sample_graph)
+                sample_graphs.append(sample_graph)
+            
             augmenter.enable_label_features(
+                graphs=sample_graphs,
                 label_key=self.node_label_key,
                 max_vocab_size=self.max_label_vocab_size
             )
