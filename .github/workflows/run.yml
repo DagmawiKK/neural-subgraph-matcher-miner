@@ -78,8 +78,8 @@ jobs:
               set -e
               echo 'Starting decoder run...'
               python -m subgraph_mining.decoder \
-                --dataset=pharmacophore_graph.pkl \
-                --n_trials=200 \
+                --dataset=networkx_graph3.pkl \
+                --n_trials=2000 \
                 --node_anchored \
                 --out_path=/app/results/patterns.pkl 
               echo 'Checking output directories...'
