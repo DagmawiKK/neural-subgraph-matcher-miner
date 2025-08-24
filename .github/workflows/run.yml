@@ -78,7 +78,7 @@ jobs:
               set -e
               echo 'Starting decoder run...'
               python -m subgraph_mining.decoder \
-                --dataset=mutag_networkx_graphs.pkl \
+                --dataset=networkx_graph.pkl \
                 --n_trials=200 \
                 --node_anchored \
                 --out_path=/app/results/patterns.pkl 
