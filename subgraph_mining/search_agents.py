@@ -264,41 +264,34 @@ worker_model = None
 worker_graphs = None
 worker_embs = None
 worker_args = None
+worker_worker_id = None
 
-def init_greedy_worker(model, graphs, embs, args):
-    """
-    Initializer function for each worker process in the pool.
-    This runs ONCE per worker and loads the large data into its global scope.
-    """
-    global worker_model, worker_graphs, worker_embs, worker_args
+def init_greedy_worker(model, graphs, embs, args, worker_id):
+    """Add worker_id parameter for deterministic seeding"""
+    global worker_model, worker_graphs, worker_embs, worker_args, worker_worker_id
     
-    # Set seeds for this worker process
     worker_seed = getattr(args, 'seed', 42)
-    process_seed = worker_seed + os.getpid()  # Unique but deterministic seed per process
+    process_seed = worker_seed + worker_id * 1000  # Use worker_id instead of PID
     
     random.seed(process_seed)
     np.random.seed(process_seed)
     torch.manual_seed(process_seed)
     
-    print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initializing with seed {process_seed}...", flush=True)
+    print(f"[{time.strftime('%H:%M:%S')}] Worker {worker_id} initializing with seed {process_seed}...", flush=True)
     
     worker_model = model
     worker_graphs = graphs
     worker_embs = embs
     worker_args = args
-    print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initialization complete.", flush=True)
+    worker_worker_id = worker_id
+    print(f"[{time.strftime('%H:%M:%S')}] Worker {worker_id} initialization complete.", flush=True)
 
 
 def run_greedy_trial(trial_idx):
-    """
-    Executes a single greedy search trial.
-    It now accesses the large data from global variables, avoiding data transfer.
-    """
-    global worker_model, worker_graphs, worker_embs, worker_args
+    global worker_model, worker_graphs, worker_embs, worker_args, worker_worker_id
     
-    # Use deterministic seeding based on trial index and base seed
     base_seed = getattr(worker_args, 'seed', 42)
-    trial_seed = base_seed + trial_idx * 10000 + os.getpid()
+    trial_seed = base_seed + trial_idx * 10000 + worker_worker_id * 1000  # Use worker_id
     
     random.seed(trial_seed)
     np.random.seed(trial_seed)
@@ -402,18 +395,24 @@ class GreedySearchAgent(SearchAgent):
 
     def run_search(self, n_trials=1000):
         """
-        Overridden run_search that uses an initializer to avoid repetitive data transfer.
+        Run search with deterministic worker initialization
         """
         self.cand_patterns = defaultdict(list)
         self.counts = defaultdict(lambda: defaultdict(list))
         self.n_trials = n_trials
 
-        init_args = (self.model, self.dataset, self.embs, self.args)
-        
+        # Create deterministic initialization function
+        def init_worker_with_id(worker_id):
+            return init_greedy_worker(self.model, self.dataset, self.embs, self.args, worker_id)
+
         args_for_pool = range(n_trials)
 
         print(f"Starting {n_trials} search trials on {self.n_workers} cores...")
-        with mp.Pool(processes=self.n_workers, initializer=init_greedy_worker, initargs=init_args) as pool:
+        
+        # Use initializer that passes worker ID
+        with mp.Pool(processes=self.n_workers, 
+                     initializer=lambda: init_greedy_worker(self.model, self.dataset, self.embs, self.args, 
+                                                           mp.current_process()._identity[0] - 1 if mp.current_process()._identity else 0)) as pool:
             results = list(tqdm(pool.imap_unordered(run_greedy_trial, args_for_pool), total=n_trials))
 
         print("Aggregating results from all worker processes...")
@@ -461,9 +460,14 @@ class GreedySearchAgent(SearchAgent):
                 cand_patterns_uniq.extend(cand_patterns_uniq_size)
                 
             elif cur_rank_method == "counts":
-                sorted_counts = sorted(self.counts[pattern_size].items(), key=lambda x: len(x[1]), reverse=True)
-                for _, neighs in sorted_counts[:self.out_batch_size]:
-                    cand_patterns_uniq.append(random.choice(neighs))
+                # Sort by hash for deterministic ordering
+                sorted_counts = sorted(self.counts[pattern_size].items(), 
+                                 key=lambda x: (len(x[1]), x[0]), reverse=True)  # Added x[0] for tie-breaking
+                for wl_hash, neighs in sorted_counts[:self.out_batch_size]:
+                    # Sort neighs list for deterministic choice
+                    sorted_neighs = sorted(neighs, key=lambda g: (len(g), g.number_of_edges(), 
+                                                            tuple(sorted(g.nodes()))))
+                    cand_patterns_uniq.append(sorted_neighs[0])  # Take first instead of random
             else:
                 print("Unrecognized rank method")
                 

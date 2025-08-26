@@ -74,14 +74,17 @@ def wl_hash(g, dim=64, node_anchored=False):
     g = nx.convert_node_labels_to_integers(g)
     vecs = np.zeros((len(g), dim), dtype=int)
     if node_anchored:
-        for v in sorted(g.nodes):  # Sort for determinism
+        # Sort nodes for deterministic iteration
+        for v in sorted(g.nodes):  # Already sorted - good!
             if g.nodes[v]["anchor"] == 1:
                 vecs[v] = 1
                 break
     for i in range(len(g)):
         newvecs = np.zeros((len(g), dim), dtype=int)
-        for n in sorted(g.nodes):  # Sort for determinism
-            neighbors = sorted(list(g.neighbors(n)) + [n])  # Sort for determinism
+        # Sort nodes for deterministic iteration
+        for n in sorted(g.nodes):  # Already sorted - good!
+            # Sort neighbors for deterministic iteration
+            neighbors = sorted(list(g.neighbors(n)) + [n])  # Already sorted - good!
             newvecs[n] = vec_hash(np.sum(vecs[neighbors], axis=0))
         vecs = newvecs
     return tuple(np.sum(vecs, axis=0))
