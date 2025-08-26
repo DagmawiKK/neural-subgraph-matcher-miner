@@ -5,7 +5,7 @@ import time
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from subgraph_mining.decoder import set_all_seeds
+from subgraph_mining.utils_seed import set_all_seeds
 
 from deepsnap.batch import Batch
 import numpy as np

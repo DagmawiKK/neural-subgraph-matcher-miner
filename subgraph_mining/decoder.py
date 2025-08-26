@@ -28,6 +28,7 @@ from common import combined_syn
 from subgraph_mining.config import parse_decoder
 from subgraph_matching.config import parse_encoder
 from visualizer.visualizer import visualize_pattern_graph_ext
+from subgraph_mining.utils_seed import set_all_seeds
 from subgraph_mining.search_agents import GreedySearchAgent, MCTSSearchAgent, MemoryEfficientMCTSAgent, MemoryEfficientGreedyAgent, BeamSearchAgent
 
 import matplotlib.pyplot as plt
@@ -632,30 +633,6 @@ def pattern_growth(dataset, task, args):
         pickle.dump(out_graphs, f)
     
     return out_graphs
-
-def set_all_seeds(seed):
-    """Set seeds for all random number generators to ensure reproducibility."""
-    print(f"Setting all random seeds to {seed}")
-    
-    # Python random
-    random.seed(seed)
-    
-    # NumPy random
-    np.random.seed(seed)
-    
-    # PyTorch random
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # for multi-GPU
-    
-    # Set deterministic algorithms (may affect performance)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    
-    # Set environment variable for hash randomization
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    
-    print(f"All random seeds set to {seed}")
 
 def main():
     if not os.path.exists("plots/cluster"):
