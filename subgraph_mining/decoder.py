@@ -447,6 +447,9 @@ def visualize_pattern_graph(pattern, args, count_by_size):
         return False
 
 def pattern_growth(dataset, task, args):
+    # Ensure seeds are set at the start of pattern growth
+    set_all_seeds(args.seed)
+    
     start_time = time.time()
     if args.method_type == "end2end":
         model = models.End2EndOrder(1, args.hidden_dim, args)
@@ -486,10 +489,21 @@ def pattern_growth(dataset, task, args):
     else:
         anchors = []
         if args.sample_method == "radial":
+            # Set specific seed for radial sampling
+            random.seed(args.seed + 1000)
+            np.random.seed(args.seed + 1000)
+            
             for i, graph in enumerate(graphs):
-                print(i)
-                for j, node in enumerate(graph.nodes):
-                    if len(dataset) <= 10 and j % 100 == 0: print(i, j)
+                # Use deterministic node iteration
+                nodes = sorted(list(graph.nodes))  # Sort for determinism
+                for j, node in enumerate(nodes):
+                    if len(dataset) <= 10 and j % 100 == 0: 
+                        print(i, j)
+                    
+                    # Set seed based on position for determinism
+                    random.seed(args.seed + i * 10000 + j)
+                    np.random.seed(args.seed + i * 10000 + j)
+                    
                     if args.use_whole_graphs:
                         neigh = graph.nodes
                     else:
@@ -523,7 +537,16 @@ def pattern_growth(dataset, task, args):
                             anchors.append(0)
         elif args.sample_method == "tree":
             start_time = time.time()
+            
+            # Set specific seed for tree sampling
+            random.seed(args.seed + 2000)
+            np.random.seed(args.seed + 2000)
+            
             for j in tqdm(range(args.n_neighborhoods)):
+                # Use j as seed offset for deterministic sampling
+                random.seed(args.seed + 2000 + j)
+                np.random.seed(args.seed + 2000 + j)
+                
                 graph, neigh = utils.sample_neigh(graphs,
                     random.randint(args.min_neighborhood_size,
                         args.max_neighborhood_size), args.graph_type)
@@ -610,6 +633,30 @@ def pattern_growth(dataset, task, args):
     
     return out_graphs
 
+def set_all_seeds(seed):
+    """Set seeds for all random number generators to ensure reproducibility."""
+    print(f"Setting all random seeds to {seed}")
+    
+    # Python random
+    random.seed(seed)
+    
+    # NumPy random
+    np.random.seed(seed)
+    
+    # PyTorch random
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # for multi-GPU
+    
+    # Set deterministic algorithms (may affect performance)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # Set environment variable for hash randomization
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"All random seeds set to {seed}")
+
 def main():
     if not os.path.exists("plots/cluster"):
         os.makedirs("plots/cluster")
@@ -619,10 +666,14 @@ def main():
     parse_decoder(parser)
     
     args = parser.parse_args()
-
+    
+    # Set reproducibility seeds FIRST
+    set_all_seeds(args.seed)
+    
     print("Using dataset {}".format(args.dataset))
     print("Graph type: {}".format(args.graph_type))
-
+    print("Using seed: {}".format(args.seed))
+    
     # Load dataset based on graph type preference
     if args.dataset.endswith('.pkl'):
         with open(args.dataset, 'rb') as f:

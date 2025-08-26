@@ -271,7 +271,17 @@ def init_greedy_worker(model, graphs, embs, args):
     This runs ONCE per worker and loads the large data into its global scope.
     """
     global worker_model, worker_graphs, worker_embs, worker_args
-    print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initializing...", flush=True)
+    
+    # Set seeds for this worker process
+    worker_seed = getattr(args, 'seed', 42)
+    process_seed = worker_seed + os.getpid()  # Unique but deterministic seed per process
+    
+    random.seed(process_seed)
+    np.random.seed(process_seed)
+    torch.manual_seed(process_seed)
+    
+    print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initializing with seed {process_seed}...", flush=True)
+    
     worker_model = model
     worker_graphs = graphs
     worker_embs = embs
@@ -286,8 +296,13 @@ def run_greedy_trial(trial_idx):
     """
     global worker_model, worker_graphs, worker_embs, worker_args
     
-    random.seed(int.from_bytes(os.urandom(4), 'little') + trial_idx)
-    np.random.seed(int.from_bytes(os.urandom(4), 'little') + trial_idx)
+    # Use deterministic seeding based on trial index and base seed
+    base_seed = getattr(worker_args, 'seed', 42)
+    trial_seed = base_seed + trial_idx * 10000 + os.getpid()
+    
+    random.seed(trial_seed)
+    np.random.seed(trial_seed)
+    torch.manual_seed(trial_seed)
 
     ps = np.array([len(g) for g in worker_graphs], dtype=np.float32)
     ps /= np.sum(ps)
@@ -295,13 +310,16 @@ def run_greedy_trial(trial_idx):
 
     graph_idx = np.arange(len(worker_graphs))[graph_dist.rvs()]
     graph = worker_graphs[graph_idx]
-    start_node = random.choice(list(graph.nodes))
+    
+    # Use sorted nodes for deterministic selection
+    nodes = sorted(list(graph.nodes))
+    start_node = random.choice(nodes)
 
     neigh = [start_node]
     if worker_args.graph_type == "undirected":
-        frontier = list(set(graph.neighbors(start_node)) - set(neigh))
+        frontier = sorted(list(set(graph.neighbors(start_node)) - set(neigh)))
     elif worker_args.graph_type == "directed":
-        frontier = list(set(graph.successors(start_node)) - set(neigh))
+        frontier = sorted(list(set(graph.successors(start_node)) - set(neigh)))
     visited = {start_node}
 
     trial_patterns = defaultdict(list)
@@ -309,6 +327,10 @@ def run_greedy_trial(trial_idx):
 
     while len(neigh) < worker_args.max_pattern_size and frontier:
         cand_neighs, anchors = [], []
+        
+        # Sort frontier for deterministic processing
+        frontier = sorted(frontier)
+        
         for cand_node in frontier:
             cand_neigh = graph.subgraph(neigh + [cand_node])
             cand_neighs.append(cand_neigh)
@@ -344,9 +366,9 @@ def run_greedy_trial(trial_idx):
             break
 
         if worker_args.graph_type == "undirected":
-            frontier = list(((set(frontier) | set(graph.neighbors(best_node))) - visited) - {best_node})
+            frontier = sorted(list(((set(frontier) | set(graph.neighbors(best_node))) - visited) - {best_node}))
         elif worker_args.graph_type == "directed":
-            frontier = list(((set(frontier) | set(graph.successors(best_node))) - visited) - {best_node})      
+            frontier = sorted(list(((set(frontier) | set(graph.successors(best_node))) - visited) - {best_node}))
               
         visited.add(best_node)
         neigh.append(best_node)

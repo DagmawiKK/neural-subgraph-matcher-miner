@@ -21,28 +21,39 @@ def sample_neigh(graphs, size, graph_type):
     ps = np.array([len(g) for g in graphs], dtype=float)
     ps /= np.sum(ps)
     dist = stats.rv_discrete(values=(np.arange(len(graphs)), ps))
+    
     while True:
         idx = dist.rvs()
-        #graph = random.choice(graphs)
         graph = graphs[idx]
-        start_node = random.choice(list(graph.nodes))
+        
+        # Use sorted nodes for deterministic selection
+        nodes = sorted(list(graph.nodes))
+        start_node = random.choice(nodes)
+        
         neigh = [start_node]
         if graph_type == "undirected":
-            frontier = list(set(graph.neighbors(start_node)) - set(neigh))
+            frontier = sorted(list(set(graph.neighbors(start_node)) - set(neigh)))
         elif graph_type == "directed":
-            frontier = list(set(graph.successors(start_node)) - set(neigh))
+            frontier = sorted(list(set(graph.successors(start_node)) - set(neigh)))
         visited = set([start_node])
+        
         while len(neigh) < size and frontier:
-            new_node = random.choice(list(frontier))
-            #new_node = max(sorted(frontier))
+            # Sort frontier for deterministic selection
+            frontier = sorted(frontier)
+            new_node = random.choice(frontier)
+            
             assert new_node not in neigh
             neigh.append(new_node)
             visited.add(new_node)
+            
             if graph_type == "undirected":
-                frontier += list(graph.neighbors(new_node))
+                new_neighbors = sorted(list(graph.neighbors(new_node)))
             elif graph_type == "directed":
-                frontier += list(graph.successors(new_node))
-            frontier = [x for x in frontier if x not in visited]
+                new_neighbors = sorted(list(graph.successors(new_node)))
+                
+            frontier += new_neighbors
+            frontier = sorted([x for x in frontier if x not in visited])
+            
         if len(neigh) == size:
             return graph, neigh
 
@@ -50,26 +61,28 @@ cached_masks = None
 def vec_hash(v):
     global cached_masks
     if cached_masks is None:
-        random.seed(2019)
+        # Use fixed seed for mask generation
+        old_state = random.getstate()
+        random.seed(2019)  # Fixed seed for reproducible masks
         cached_masks = [random.getrandbits(32) for i in range(len(v))]
-    #v = [hash(tuple(v)) ^ mask for mask in cached_masks]
+        random.setstate(old_state)  # Restore original state
+        
     v = [hash(v[i]) ^ mask for i, mask in enumerate(cached_masks)]
-    #v = [np.sum(v) for mask in cached_masks]
     return v
 
 def wl_hash(g, dim=64, node_anchored=False):
     g = nx.convert_node_labels_to_integers(g)
     vecs = np.zeros((len(g), dim), dtype=int)
     if node_anchored:
-        for v in g.nodes:
+        for v in sorted(g.nodes):  # Sort for determinism
             if g.nodes[v]["anchor"] == 1:
                 vecs[v] = 1
                 break
     for i in range(len(g)):
         newvecs = np.zeros((len(g), dim), dtype=int)
-        for n in g.nodes:
-            newvecs[n] = vec_hash(np.sum(vecs[list(g.neighbors(n)) + [n]],
-                axis=0))
+        for n in sorted(g.nodes):  # Sort for determinism
+            neighbors = sorted(list(g.neighbors(n)) + [n])  # Sort for determinism
+            newvecs[n] = vec_hash(np.sum(vecs[neighbors], axis=0))
         vecs = newvecs
     return tuple(np.sum(vecs, axis=0))
 
