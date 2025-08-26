@@ -3,6 +3,9 @@ import csv
 from itertools import combinations
 import time
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from subgraph_mining.decoder import set_all_seeds
 
 from deepsnap.batch import Batch
 import numpy as np
@@ -260,22 +263,38 @@ class MCTSSearchAgent(SearchAgent):
 def default_dd_list():
     return defaultdict(list)
 
+# Global variables for multiprocessing (declare once at module level)
+worker_model_global = None
+worker_graphs_global = None
+worker_embs_global = None
+worker_args_global = None
+
+# Worker-specific globals
 worker_model = None
 worker_graphs = None
 worker_embs = None
 worker_args = None
 worker_worker_id = None
 
+def init_worker_wrapper():
+    """Wrapper function for worker initialization that can be pickled"""
+    global worker_model_global, worker_graphs_global, worker_embs_global, worker_args_global  # Add this line
+    
+    # Get worker ID from process identity
+    worker_id = mp.current_process()._identity[0] - 1 if mp.current_process()._identity else 0
+    
+    return init_greedy_worker(worker_model_global, worker_graphs_global, 
+                             worker_embs_global, worker_args_global, worker_id)
+
 def init_greedy_worker(model, graphs, embs, args, worker_id):
-    """Add worker_id parameter for deterministic seeding"""
+    """Initialize worker with deterministic seeding"""
     global worker_model, worker_graphs, worker_embs, worker_args, worker_worker_id
     
     worker_seed = getattr(args, 'seed', 42)
-    process_seed = worker_seed + worker_id * 1000  # Use worker_id instead of PID
+    process_seed = worker_seed + worker_id * 1000
     
-    random.seed(process_seed)
-    np.random.seed(process_seed)
-    torch.manual_seed(process_seed)
+    # Use set_all_seeds instead of individual seed calls
+    set_all_seeds(process_seed)
     
     print(f"[{time.strftime('%H:%M:%S')}] Worker {worker_id} initializing with seed {process_seed}...", flush=True)
     
@@ -291,11 +310,10 @@ def run_greedy_trial(trial_idx):
     global worker_model, worker_graphs, worker_embs, worker_args, worker_worker_id
     
     base_seed = getattr(worker_args, 'seed', 42)
-    trial_seed = base_seed + trial_idx * 10000 + worker_worker_id * 1000  # Use worker_id
+    trial_seed = base_seed + trial_idx * 10000 + worker_worker_id * 1000
     
-    random.seed(trial_seed)
-    np.random.seed(trial_seed)
-    torch.manual_seed(trial_seed)
+    # Use set_all_seeds instead of individual seed calls
+    set_all_seeds(trial_seed)
 
     ps = np.array([len(g) for g in worker_graphs], dtype=np.float32)
     ps /= np.sum(ps)
@@ -389,6 +407,7 @@ class GreedySearchAgent(SearchAgent):
         self.rank_method = rank_method
         self.n_beams = n_beams
         self.n_workers = n_workers
+        self.args = None  # Add this line - will be set by decoder.py
         print("Rank Method:", rank_method)
         if self.n_workers > 1:
             print(f"Using {self.n_workers} worker processes for parallel search.")
@@ -397,22 +416,25 @@ class GreedySearchAgent(SearchAgent):
         """
         Run search with deterministic worker initialization
         """
+        global worker_model_global, worker_graphs_global, worker_embs_global, worker_args_global
+        
         self.cand_patterns = defaultdict(list)
         self.counts = defaultdict(lambda: defaultdict(list))
         self.n_trials = n_trials
 
-        # Create deterministic initialization function
-        def init_worker_with_id(worker_id):
-            return init_greedy_worker(self.model, self.dataset, self.embs, self.args, worker_id)
+        # Set global variables for worker initialization
+        worker_model_global = self.model
+        worker_graphs_global = self.dataset
+        worker_embs_global = self.embs
+        worker_args_global = self.args
 
         args_for_pool = range(n_trials)
 
         print(f"Starting {n_trials} search trials on {self.n_workers} cores...")
         
-        # Use initializer that passes worker ID
+        # Use the wrapper function instead of lambda
         with mp.Pool(processes=self.n_workers, 
-                     initializer=lambda: init_greedy_worker(self.model, self.dataset, self.embs, self.args, 
-                                                           mp.current_process()._identity[0] - 1 if mp.current_process()._identity else 0)) as pool:
+                     initializer=init_worker_wrapper) as pool:
             results = list(tqdm(pool.imap_unordered(run_greedy_trial, args_for_pool), total=n_trials))
 
         print("Aggregating results from all worker processes...")
@@ -424,7 +446,7 @@ class GreedySearchAgent(SearchAgent):
                     self.counts[size][h].extend(graphs)
 
         return self.finish_search()
-
+    
     def finish_search(self):
         """
         Processes the aggregated results from all trials to find the most frequent patterns.
@@ -1000,3 +1022,10 @@ class BeamSearchAgent(SearchAgent):
                     print(f"- outputting {count} motifs of size {pattern_size}")
         
         return cand_patterns_uniq
+
+def init_worker_wrapper():
+    """Wrapper function to replace the lambda that can't be pickled"""
+    worker_id = mp.current_process()._identity[0] - 1 if mp.current_process()._identity else 0
+    # These will be set by the pool creation
+    return init_greedy_worker(worker_model_global, worker_graphs_global, 
+                             worker_embs_global, worker_args_global, worker_id)
