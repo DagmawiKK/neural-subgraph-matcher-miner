@@ -432,9 +432,9 @@ class GreedySearchAgent(SearchAgent):
 
         print(f"Starting {n_trials} search trials on {self.n_workers} cores...")
         
-        # Use the wrapper function instead of lambda
+        # Remove this lambda and use the wrapper function instead:
         with mp.Pool(processes=self.n_workers, 
-                     initializer=init_worker_wrapper) as pool:
+                 initializer=init_worker_wrapper) as pool:  # <-- Change this line
             results = list(tqdm(pool.imap_unordered(run_greedy_trial, args_for_pool), total=n_trials))
 
         print("Aggregating results from all worker processes...")
