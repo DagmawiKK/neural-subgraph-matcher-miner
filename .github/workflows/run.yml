@@ -47,6 +47,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/results
           chmod -R 777 ${{ github.workspace }}/plots
           chmod -R 777 ${{ github.workspace }}/results
+          mkdir -p ${{ github.workspace }}/subgraph_mining/ENZYMES/processed
+          chmod -R 777 ${{ github.workspace }}/subgraph_mining/ENZYMES
 
       - name: Copy chatbot server files to plots
         run: |

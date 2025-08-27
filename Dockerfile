@@ -63,3 +63,5 @@ RUN pip install --no-cache-dir \
     tqdm==4.43.0
 
 COPY . .
+
+COPY subgraph_mining/ENZYMES /app/subgraph_mining/ENZYMES
