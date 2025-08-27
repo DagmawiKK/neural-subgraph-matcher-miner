@@ -666,7 +666,7 @@ def main():
         dataset = [graph]
         task = 'graph'
     elif args.dataset == 'enzymes':
-        dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
+        dataset = TUDataset(root='subgraph_mining/ENZYMES', name='ENZYMES')
         task = 'graph'
     elif args.dataset == 'cox2':
         dataset = TUDataset(root='/tmp/cox2', name='COX2')
