@@ -666,8 +666,8 @@ def main():
         dataset = [graph]
         task = 'graph'
     elif args.dataset == 'enzymes':
-        import os
-        from torch_geometric.datasets import TUDataset
+        # import os
+        # from torch_geometric.datasets import TUDataset
         
         # Ensure processed directory exists
         processed_dir = 'subgraph_mining/ENZYMES/processed'
