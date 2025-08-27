@@ -680,7 +680,7 @@ def main():
         except Exception as e:
             print(f"Standard loading failed: {e}")
             # If that fails, manually process the raw files
-            from torch_geometric.datasets.tu_dataset import TUDataset
+            # from torch_geometric.datasets.tu_dataset import TUDataset
             
             # Monkey patch the download method to do nothing
             original_download = TUDataset.download
