@@ -666,8 +666,8 @@ def main():
         dataset = [graph]
         task = 'graph'
     elif args.dataset == 'enzymes':
-        # import os
-        # from torch_geometric.datasets import TUDataset
+        # Import at the top level to avoid scoping issues
+        from torch_geometric.datasets import TUDataset as TUDatasetClass
         
         # Ensure processed directory exists
         processed_dir = 'subgraph_mining/ENZYMES/processed'
@@ -676,30 +676,35 @@ def main():
         # Create a custom loader that bypasses download
         try:
             # First try to load normally
-            dataset = TUDataset(root='subgraph_mining/ENZYMES', name='ENZYMES')
+            dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
         except Exception as e:
             print(f"Standard loading failed: {e}")
-            # If that fails, manually process the raw files
-            # from torch_geometric.datasets.tu_dataset import TUDataset
             
             # Monkey patch the download method to do nothing
-            original_download = TUDataset.download
-            TUDataset.download = lambda self: None
+            original_download = TUDatasetClass.download
+            TUDatasetClass.download = lambda self: None
             
-            # Try to load again
             try:
-                dataset = TUDataset(root='subgraph_mining/ENZYMES', name='ENZYMES')
-            except:
+                dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
+            except Exception as e2:
+                print(f"Second attempt failed: {e2}")
                 # If still failing, create minimal dataset structure
                 print("Creating minimal dataset structure...")
                 import torch
                 torch.save([], os.path.join(processed_dir, 'data.pt'))
                 torch.save([], os.path.join(processed_dir, 'slices.pt'))
-                dataset = TUDataset(root='subgraph_mining/ENZYMES', name='ENZYMES')
-            finally:
-                # Restore original download method
-                TUDataset.download = original_download
-        
+                
+                # Try one more time
+                try:
+                    dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
+                except Exception as e3:
+                    print(f"Final attempt failed: {e3}")
+                    # Manual fallback - create empty dataset
+                    dataset = []
+        finally:
+            # Restore original download method
+            TUDatasetClass.download = original_download
+    
         task = 'graph'
     elif args.dataset == 'cox2':
         dataset = TUDataset(root='/tmp/cox2', name='COX2')
