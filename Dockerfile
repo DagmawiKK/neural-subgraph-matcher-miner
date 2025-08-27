@@ -64,12 +64,3 @@ RUN pip install --no-cache-dir \
 
 COPY . .
 
-COPY subgraph_mining/ENZYMES /app/subgraph_mining/ENZYMES
-
-RUN echo 'import sys' > preprocess.py && \
-    echo 'sys.path.append("/app")' >> preprocess.py && \
-    echo 'from torch_geometric.datasets import TUDataset' >> preprocess.py && \
-    echo 'dataset = TUDataset(root="/app/subgraph_mining/ENZYMES", name="ENZYMES")' >> preprocess.py && \
-    echo 'print(f"Successfully pre-processed ENZYMES dataset with {len(dataset)} graphs")' >> preprocess.py && \
-    python preprocess.py && \
-    rm preprocess.py
