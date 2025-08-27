@@ -673,10 +673,9 @@ def main():
         processed_dir = 'subgraph_mining/ENZYMES/processed'
         os.makedirs(processed_dir, exist_ok=True)
         
-        # Create a custom loader that bypasses download
         try:
             # First try to load normally
-            dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
+            dataset = TUDatasetClass(root='subgraph_mining', name='ENZYMES')
         except Exception as e:
             print(f"Standard loading failed: {e}")
             
@@ -685,7 +684,7 @@ def main():
             TUDatasetClass.download = lambda self: None
             
             try:
-                dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
+                dataset = TUDatasetClass(root='subgraph_mining', name='ENZYMES')
             except Exception as e2:
                 print(f"Second attempt failed: {e2}")
                 # If still failing, create minimal dataset structure
@@ -696,14 +695,14 @@ def main():
                 
                 # Try one more time
                 try:
-                    dataset = TUDatasetClass(root='subgraph_mining/ENZYMES', name='ENZYMES')
+                    dataset = TUDatasetClass(root='subgraph_mining', name='ENZYMES')
                 except Exception as e3:
                     print(f"Final attempt failed: {e3}")
                     # Manual fallback - create empty dataset
                     dataset = []
-        finally:
-            # Restore original download method
-            TUDatasetClass.download = original_download
+            finally:
+                # Restore original download method only if it was changed
+                TUDatasetClass.download = original_download
     
         task = 'graph'
     elif args.dataset == 'cox2':
