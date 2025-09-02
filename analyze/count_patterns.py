@@ -522,14 +522,14 @@ def convert_to_networkx(graph):
 def gen_baseline_queries(queries, targets, method="radial", node_anchored=False, args=None):
     print(f"Generating {len(queries)} baseline queries in parallel using method: {method}")
     args_list = [(i, query, targets, method, args) for i, query in enumerate(queries)]
-    with Pool(processes=os.cpu_count()) as pool:
+    # Use a specific number of processes to avoid overwhelming the system
+    with Pool(processes=min(os.cpu_count(), 8)) as pool:
         results = pool.map(generate_one_baseline, args_list)
     return results
 
 
-def main():
-    global args
-    args = arg_parse()
+# The main logic should be inside a function that can be called from the __main__ block
+def run_analysis(args):
     print("Using {} workers".format(args.n_workers))
     print("Baseline:", args.baseline)
     print(f"Max query size: {args.max_query_size}")
@@ -540,7 +540,6 @@ def main():
         print(f"Loading Networkx graph from {args.dataset}")
         try:
             graph = load_networkx_graph(args.dataset)
-           #print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
             dataset = [graph]
         except Exception as e:
             print(f"Error loading graph: {str(e)}")
@@ -616,6 +615,8 @@ def main():
     print(f"Results saved to {args.out_path}")
 
 
-
 if __name__ == "__main__":
-    main()
+    # This code will ONLY run when the script is executed directly
+    # It will NOT run when imported by worker processes
+    args = arg_parse()
+    run_analysis(args)
