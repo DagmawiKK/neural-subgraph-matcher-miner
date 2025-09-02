@@ -63,20 +63,20 @@ def parse_decoder(parser):
         
         # Decoder defaults
         out_path="results/out-patterns.p",
-        n_neighborhoods=2000,
-        n_trials=1000,
+        n_neighborhoods=200,
+        n_trials=100,
         decode_thresh=0.5,
         radius=3,
         subgraph_sample_size=0,
         sample_method="tree",
         skip="learnable",
         graph_type="undirected",
-        min_pattern_size=5,
+        min_pattern_size=3,
         max_pattern_size=10,
-        min_neighborhood_size=5,
+        min_neighborhood_size=3,
         max_neighborhood_size=10,
         search_strategy="greedy",
-        out_batch_size=10,
+        out_batch_size=5,
         node_anchored=True,
         memory_limit=1000000
     )
