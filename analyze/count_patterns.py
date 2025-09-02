@@ -1,3 +1,4 @@
+print("Running count_patterns.py...")
 import argparse
 import csv
 import time
@@ -43,14 +44,6 @@ import torch.multiprocessing as mp
 from sklearn.decomposition import PCA
 from itertools import combinations
 
-import argparse
-from subgraph_mining.config import parse_decoder
-from subgraph_matching.config import parse_encoder
-
-parser = argparse.ArgumentParser(description='Decoder arguments')
-parse_encoder(parser)
-parse_decoder(parser)
-args = parser.parse_args()
 
 # Increase timeout for large graphs
 MAX_SEARCH_TIME = 1800  # 30 minutes for large graph processing
@@ -58,7 +51,10 @@ MAX_MATCHES_PER_QUERY = 10000
 DEFAULT_SAMPLE_ANCHORS = 1000
 CHECKPOINT_INTERVAL = 100  # Save progress every 100 tasks
 
-def compute_graph_stats(G):
+import multiprocessing as mp
+mp.set_start_method("spawn", force=True)
+
+def compute_graph_stats(G, args):
     """Compute graph statistics for filtering."""
     stats = {
         'n_nodes': G.number_of_nodes(),
@@ -102,6 +98,7 @@ def arg_parse():
     parser = argparse.ArgumentParser(description='count graphlets in a graph')
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--queries_path', type=str)
+    parser.add_argument('--graph_type', type=str)
     parser.add_argument('--out_path', type=str)
     parser.add_argument('--n_workers', type=int)
     parser.add_argument('--count_method', type=str)
@@ -114,12 +111,11 @@ def arg_parse():
     parser.add_argument('--batch_size', type=int, default=500, help='Batch size for processing')
     parser.add_argument('--timeout', type=int, default=MAX_SEARCH_TIME, help='Timeout per task in seconds')
     parser.add_argument('--use_sampling', action="store_true", help='Use node sampling for very large graphs')
-    parser.add_argument('--graph_type', type=str, choices=['directed', 'undirected'], default='directed',
-                      help='Type of graph (directed or undirected)')
     parser.set_defaults(dataset="enzymes",
                        queries_path="results/out-patterns.p",
                        out_path="results/counts.json",
                        n_workers=4,
+                       graph_type = "undirected",
                        count_method="bin",
                        baseline="none",
                        preserve_labels=False)
@@ -167,9 +163,10 @@ def load_networkx_graph(filepath):
             
         raise ValueError(f"Unknown pickle format in {filepath}")
 
+
 def count_graphlets_helper(inp):
     """Worker function to count pattern occurrences with better timeout handling."""
-    i, query, target, method, node_anchored, anchor_or_none, preserve_labels, timeout = inp
+    i, query, target, method, node_anchored, anchor_or_none, preserve_labels, timeout, args = inp
     
     start_time = time.time()
     
@@ -177,8 +174,8 @@ def count_graphlets_helper(inp):
     effective_timeout = min(timeout, 600)  # Max 10 minutes per task
     
     # Quick stats check before proceeding
-    query_stats = compute_graph_stats(query)
-    target_stats = compute_graph_stats(target)
+    query_stats = compute_graph_stats(query, args)
+    target_stats = compute_graph_stats(target, args)
     if not can_be_isomorphic(query_stats, target_stats):
         return i, 0
     
@@ -371,9 +368,9 @@ def count_graphlets(queries, targets, args):
     #changed to multiprocessing using 
     with Pool(processes=args.n_workers) as pool:
 
-        target_stats = pool.map(compute_graph_stats, targets)
+        target_stats = pool.starmap(compute_graph_stats, [(t, args) for t in targets])
         
-        query_stats = pool.map(compute_graph_stats, queries)
+        query_stats = pool.starmap(compute_graph_stats, [(q, args) for q in queries])
     
     # Generate work items with filtering
     inp = []
@@ -407,10 +404,10 @@ def count_graphlets(queries, targets, args):
                     
                 for anchor in anchors:
                     inp.append((i, query, target, args.count_method, args.node_anchored, anchor, 
-                             args.preserve_labels, args.timeout))
+                             args.preserve_labels, args.timeout, args))
             else:
                 inp.append((i, query, target, args.count_method, args.node_anchored, None, 
-                         args.preserve_labels, args.timeout))
+                         args.preserve_labels, args.timeout, args))
     
     print(f"Generated {len(inp)} tasks after filtering")
     n_done = 0
@@ -460,11 +457,11 @@ def count_graphlets(queries, targets, args):
 
 
 #multiprocessing gen_baseline_queries ----------------
-def generate_one_baseline(args):
+def generate_one_baseline(args_tuple):
     import networkx as nx
     import random
 
-    i, query, targets, method = args
+    i, query, targets, method, args = args_tuple
 
     if len(query) == 0:
         return query
@@ -522,13 +519,11 @@ def convert_to_networkx(graph):
         return graph
     return pyg_utils.to_networkx(graph).to_undirected()
     
-def gen_baseline_queries(queries, targets, method="radial", node_anchored=False):
+def gen_baseline_queries(queries, targets, method="radial", node_anchored=False, args=None):
     print(f"Generating {len(queries)} baseline queries in parallel using method: {method}")
-    
-    args_list = [(i, query, targets, method) for i, query in enumerate(queries)]
+    args_list = [(i, query, targets, method, args) for i, query in enumerate(queries)]
     with Pool(processes=os.cpu_count()) as pool:
         results = pool.map(generate_one_baseline, args_list)
-    
     return results
 
 
@@ -609,8 +604,9 @@ def main():
     else:
         # Generate baseline queries for comparison
         print(f"Generating baseline queries using {args.baseline}")
-        baseline_queries = gen_baseline_queries(queries, targets,
-            node_anchored=args.node_anchored, method=args.baseline)
+        baseline_queries = gen_baseline_queries(
+    queries, targets, node_anchored=args.node_anchored, method=args.baseline, args=args
+)
         query_lens = [len(q) for q in baseline_queries]
         n_matches = count_graphlets(baseline_queries, targets, args)
             
