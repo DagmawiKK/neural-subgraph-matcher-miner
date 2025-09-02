@@ -43,6 +43,15 @@ import torch.multiprocessing as mp
 from sklearn.decomposition import PCA
 from itertools import combinations
 
+import argparse
+from subgraph_mining.config import parse_decoder
+from subgraph_matching.config import parse_encoder
+
+parser = argparse.ArgumentParser(description='Decoder arguments')
+parse_encoder(parser)
+parse_decoder(parser)
+args = parser.parse_args()
+
 # Increase timeout for large graphs
 MAX_SEARCH_TIME = 1800  # 30 minutes for large graph processing
 MAX_MATCHES_PER_QUERY = 10000
@@ -60,7 +69,10 @@ def compute_graph_stats(G):
     
     # Add connected components info
     try:
-        stats['n_components'] = nx.number_connected_components(G)
+        if args.graph_type == "directed":
+            stats['n_components'] = nx.number_strongly_connected_components(G)
+        else:
+            stats['n_components'] = nx.number_connected_components(G)
     except:
         stats['n_components'] = 1  # Assume connected if there's an error
         
@@ -102,6 +114,8 @@ def arg_parse():
     parser.add_argument('--batch_size', type=int, default=500, help='Batch size for processing')
     parser.add_argument('--timeout', type=int, default=MAX_SEARCH_TIME, help='Timeout per task in seconds')
     parser.add_argument('--use_sampling', action="store_true", help='Use node sampling for very large graphs')
+    parser.add_argument('--graph_type', type=str, choices=['directed', 'undirected'], default='directed',
+                      help='Type of graph (directed or undirected)')
     parser.set_defaults(dataset="enzymes",
                        queries_path="results/out-patterns.p",
                        out_path="results/counts.json",
@@ -112,33 +126,46 @@ def arg_parse():
     return parser.parse_args()
 
 def load_networkx_graph(filepath):
-    """Load a Networkx graph from pickle format with proper attributes handling."""
+    """Load a Networkx graph from pickle format matching decoder's approach"""
     with open(filepath, 'rb') as f:
         data = pickle.load(f)
-        graph = nx.Graph()
         
-        # Add nodes with their attributes
-        for node in data['nodes']:
-            if isinstance(node, tuple):
-                # Format: (node_id, attribute_dict)
-                node_id, attrs = node
-                graph.add_node(node_id, **attrs)
+        # If it's already a NetworkX graph, return it directly
+        if isinstance(data, (nx.Graph, nx.DiGraph)):
+            return data
+            
+        # If it's a PyG Data object, convert to NetworkX
+        try:
+            from torch_geometric.data import Data
+            if isinstance(data, Data):
+                return pyg_utils.to_networkx(data).to_undirected()
+        except ImportError:
+            pass
+            
+        # If it's a dictionary with graph data
+        if isinstance(data, dict):
+            if args.graph_type == "directed":
+                graph = nx.DiGraph()
             else:
-                # Format: just node_id
-                graph.add_node(node)
-        
-        # Add edges with their attributes
-        for edge in data['edges']:
-            if len(edge) == 3:
-                # Format: (src, dst, attribute_dict)
-                src, dst, attrs = edge
-                graph.add_edge(src, dst, **attrs)
-            else:
-                # Format: just (src, dst)
-                src, dst = edge[:2]
-                graph.add_edge(src, dst)
-                
-        return graph
+                graph = nx.Graph()
+            
+            # Handle node attributes
+            if 'node_attrs' in data:
+                for node_id, attrs in enumerate(data['node_attrs']):
+                    graph.add_node(node_id, **attrs)
+            elif 'node_features' in data:
+                for node_id, feats in enumerate(data['node_features']):
+                    graph.add_node(node_id, features=feats)
+            
+            # Handle edge indices
+            if 'edge_index' in data:
+                edge_index = data['edge_index']
+                for src, dst in zip(edge_index[0], edge_index[1]):
+                    graph.add_edge(src.item(), dst.item())
+            
+            return graph
+            
+        raise ValueError(f"Unknown pickle format in {filepath}")
 
 def count_graphlets_helper(inp):
     """Worker function to count pattern occurrences with better timeout handling."""
@@ -186,13 +213,23 @@ def count_graphlets_helper(inp):
                 
                 if preserve_labels:
                     # Use lambda functions to properly match node and edge attributes
-                    matcher = iso.GraphMatcher(target, query,
-                        node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
-                                                  n1.get("label") == n2.get("label")),
-                        edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
+                    if args.graph_type == "directed":
+                        matcher = iso.DiGraphMatcher(target, query,
+                            node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
+                                                    n1.get("label") == n2.get("label")),
+                            edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
+                    else:
+                        matcher = iso.GraphMatcher(target, query,
+                            node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
+                                                    n1.get("label") == n2.get("label")),
+                            edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
                 else:
-                    matcher = iso.GraphMatcher(target, query,
-                        node_match=iso.categorical_node_match(["anchor"], [0]))
+                    if args.graph_type == "directed":
+                        matcher = iso.DiGraphMatcher(target, query,
+                            node_match=iso.categorical_node_match(["anchor"], [0]))
+                    else:
+                        matcher = iso.GraphMatcher(target, query,
+                            node_match=iso.categorical_node_match(["anchor"], [0]))
                 
                 if time.time() - start_time > timeout:
                     print(f"Timeout on query {i} before isomorphism check")
@@ -275,15 +312,22 @@ def sample_subgraphs(target, n_samples=10, max_size=1000):
         # Start with a random node
         start_node = random.choice(nodes)
         subgraph_nodes = {start_node}
-        frontier = list(target.neighbors(start_node))
+        if args.graph_type == "directed":
+            frontier = list(target.successors(start_node))
+        else:
+            frontier = list(target.neighbors(start_node))
         
         # Grow the subgraph by BFS
         while len(subgraph_nodes) < max_size and frontier:
             next_node = frontier.pop(0)
             if next_node not in subgraph_nodes:
                 subgraph_nodes.add(next_node)
-                frontier.extend([n for n in target.neighbors(next_node) 
-                              if n not in subgraph_nodes and n not in frontier])
+                if args.graph_type == "directed":
+                    frontier.extend([n for n in target.successors(next_node) 
+                                    if n not in subgraph_nodes and n not in frontier])
+                else:
+                    frontier.extend([n for n in target.neighbors(next_node) 
+                                    if n not in subgraph_nodes and n not in frontier])
         
         sg = target.subgraph(subgraph_nodes)
         subgraphs.append(sg)
@@ -439,7 +483,10 @@ def generate_one_baseline(args):
                 subgraph = graph.subgraph(neigh)
                 if subgraph.number_of_nodes() == 0:
                     continue
-                largest_cc = max(nx.connected_components(subgraph), key=len)
+                if args.graph_type == "directed":
+                    largest_cc = max(nx.strongly_connected_components(subgraph), key=len)
+                else:
+                    largest_cc = max(nx.connected_components(subgraph), key=len)
                 neigh = subgraph.subgraph(largest_cc)
                 neigh = nx.convert_node_labels_to_integers(neigh)
                 if len(neigh) == len(query):
@@ -448,11 +495,17 @@ def generate_one_baseline(args):
             elif method == "tree":
                 start_node = random.choice(list(graph.nodes))
                 neigh = [start_node]
-                frontier = list(set(graph.neighbors(start_node)) - set(neigh))
+                if args.graph_type == "directed":
+                    frontier = list(set(graph.successors(start_node)) - set(neigh))
+                else:
+                    frontier = list(set(graph.neighbors(start_node)) - set(neigh))
                 while len(neigh) < len(query) and frontier:
                     new_node = random.choice(frontier)
                     neigh.append(new_node)
-                    frontier += list(graph.neighbors(new_node))
+                    if args.graph_type == "directed":
+                        frontier += list(graph.successors(new_node))
+                    else:
+                        frontier += list(graph.neighbors(new_node))
                     frontier = [x for x in frontier if x not in neigh]
                 if len(neigh) == len(query):
                     sub = graph.subgraph(neigh)
@@ -465,7 +518,7 @@ def generate_one_baseline(args):
     return nx.Graph()  # Return empty graph if failed
 
 def convert_to_networkx(graph):
-    if isinstance(graph, nx.Graph):
+    if isinstance(graph, nx.Graph) or isinstance(graph, nx.DiGraph):
         return graph
     return pyg_utils.to_networkx(graph).to_undirected()
     
