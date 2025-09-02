@@ -346,8 +346,8 @@ def run_greedy_trial(trial_idx):
         if worker_args.graph_type == "undirected":
             frontier = list(((set(frontier) | set(graph.neighbors(best_node))) - visited) - {best_node})
         elif worker_args.graph_type == "directed":
-            frontier = list(((set(frontier) | set(graph.successors(best_node))) - visited) - {best_node})
-            
+            frontier = list(((set(frontier) | set(graph.successors(best_node))) - visited) - {best_node})      
+              
         visited.add(best_node)
         neigh.append(best_node)
 

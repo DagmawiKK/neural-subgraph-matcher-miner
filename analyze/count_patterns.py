@@ -1,4 +1,3 @@
-print("Running count_patterns.py...")
 import argparse
 import csv
 import time
@@ -44,17 +43,13 @@ import torch.multiprocessing as mp
 from sklearn.decomposition import PCA
 from itertools import combinations
 
-
 # Increase timeout for large graphs
 MAX_SEARCH_TIME = 1800  # 30 minutes for large graph processing
 MAX_MATCHES_PER_QUERY = 10000
 DEFAULT_SAMPLE_ANCHORS = 1000
 CHECKPOINT_INTERVAL = 100  # Save progress every 100 tasks
 
-import multiprocessing as mp
-mp.set_start_method("spawn", force=True)
-
-def compute_graph_stats(G, args):
+def compute_graph_stats(G):
     """Compute graph statistics for filtering."""
     stats = {
         'n_nodes': G.number_of_nodes(),
@@ -65,10 +60,7 @@ def compute_graph_stats(G, args):
     
     # Add connected components info
     try:
-        if args.graph_type == "directed":
-            stats['n_components'] = nx.number_strongly_connected_components(G)
-        else:
-            stats['n_components'] = nx.number_connected_components(G)
+        stats['n_components'] = nx.number_connected_components(G)
     except:
         stats['n_components'] = 1  # Assume connected if there's an error
         
@@ -98,7 +90,6 @@ def arg_parse():
     parser = argparse.ArgumentParser(description='count graphlets in a graph')
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--queries_path', type=str)
-    parser.add_argument('--graph_type', type=str)
     parser.add_argument('--out_path', type=str)
     parser.add_argument('--n_workers', type=int)
     parser.add_argument('--count_method', type=str)
@@ -115,58 +106,43 @@ def arg_parse():
                        queries_path="results/out-patterns.p",
                        out_path="results/counts.json",
                        n_workers=4,
-                       graph_type = "undirected",
                        count_method="bin",
                        baseline="none",
                        preserve_labels=False)
     return parser.parse_args()
 
 def load_networkx_graph(filepath):
-    """Load a Networkx graph from pickle format matching decoder's approach"""
+    """Load a Networkx graph from pickle format with proper attributes handling."""
     with open(filepath, 'rb') as f:
         data = pickle.load(f)
+        graph = nx.Graph()
         
-        # If it's already a NetworkX graph, return it directly
-        if isinstance(data, (nx.Graph, nx.DiGraph)):
-            return data
-            
-        # If it's a PyG Data object, convert to NetworkX
-        try:
-            from torch_geometric.data import Data
-            if isinstance(data, Data):
-                return pyg_utils.to_networkx(data).to_undirected()
-        except ImportError:
-            pass
-            
-        # If it's a dictionary with graph data
-        if isinstance(data, dict):
-            if args.graph_type == "directed":
-                graph = nx.DiGraph()
+        # Add nodes with their attributes
+        for node in data['nodes']:
+            if isinstance(node, tuple):
+                # Format: (node_id, attribute_dict)
+                node_id, attrs = node
+                graph.add_node(node_id, **attrs)
             else:
-                graph = nx.Graph()
-            
-            # Handle node attributes
-            if 'node_attrs' in data:
-                for node_id, attrs in enumerate(data['node_attrs']):
-                    graph.add_node(node_id, **attrs)
-            elif 'node_features' in data:
-                for node_id, feats in enumerate(data['node_features']):
-                    graph.add_node(node_id, features=feats)
-            
-            # Handle edge indices
-            if 'edge_index' in data:
-                edge_index = data['edge_index']
-                for src, dst in zip(edge_index[0], edge_index[1]):
-                    graph.add_edge(src.item(), dst.item())
-            
-            return graph
-            
-        raise ValueError(f"Unknown pickle format in {filepath}")
-
+                # Format: just node_id
+                graph.add_node(node)
+        
+        # Add edges with their attributes
+        for edge in data['edges']:
+            if len(edge) == 3:
+                # Format: (src, dst, attribute_dict)
+                src, dst, attrs = edge
+                graph.add_edge(src, dst, **attrs)
+            else:
+                # Format: just (src, dst)
+                src, dst = edge[:2]
+                graph.add_edge(src, dst)
+                
+        return graph
 
 def count_graphlets_helper(inp):
     """Worker function to count pattern occurrences with better timeout handling."""
-    i, query, target, method, node_anchored, anchor_or_none, preserve_labels, timeout, args = inp
+    i, query, target, method, node_anchored, anchor_or_none, preserve_labels, timeout = inp
     
     start_time = time.time()
     
@@ -174,8 +150,8 @@ def count_graphlets_helper(inp):
     effective_timeout = min(timeout, 600)  # Max 10 minutes per task
     
     # Quick stats check before proceeding
-    query_stats = compute_graph_stats(query, args)
-    target_stats = compute_graph_stats(target, args)
+    query_stats = compute_graph_stats(query)
+    target_stats = compute_graph_stats(target)
     if not can_be_isomorphic(query_stats, target_stats):
         return i, 0
     
@@ -210,23 +186,13 @@ def count_graphlets_helper(inp):
                 
                 if preserve_labels:
                     # Use lambda functions to properly match node and edge attributes
-                    if args.graph_type == "directed":
-                        matcher = iso.DiGraphMatcher(target, query,
-                            node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
-                                                    n1.get("label") == n2.get("label")),
-                            edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
-                    else:
-                        matcher = iso.GraphMatcher(target, query,
-                            node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
-                                                    n1.get("label") == n2.get("label")),
-                            edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
+                    matcher = iso.GraphMatcher(target, query,
+                        node_match=lambda n1, n2: (n1.get("anchor") == n2.get("anchor") and
+                                                  n1.get("label") == n2.get("label")),
+                        edge_match=lambda e1, e2: e1.get("type") == e2.get("type"))
                 else:
-                    if args.graph_type == "directed":
-                        matcher = iso.DiGraphMatcher(target, query,
-                            node_match=iso.categorical_node_match(["anchor"], [0]))
-                    else:
-                        matcher = iso.GraphMatcher(target, query,
-                            node_match=iso.categorical_node_match(["anchor"], [0]))
+                    matcher = iso.GraphMatcher(target, query,
+                        node_match=iso.categorical_node_match(["anchor"], [0]))
                 
                 if time.time() - start_time > timeout:
                     print(f"Timeout on query {i} before isomorphism check")
@@ -309,22 +275,15 @@ def sample_subgraphs(target, n_samples=10, max_size=1000):
         # Start with a random node
         start_node = random.choice(nodes)
         subgraph_nodes = {start_node}
-        if args.graph_type == "directed":
-            frontier = list(target.successors(start_node))
-        else:
-            frontier = list(target.neighbors(start_node))
+        frontier = list(target.neighbors(start_node))
         
         # Grow the subgraph by BFS
         while len(subgraph_nodes) < max_size and frontier:
             next_node = frontier.pop(0)
             if next_node not in subgraph_nodes:
                 subgraph_nodes.add(next_node)
-                if args.graph_type == "directed":
-                    frontier.extend([n for n in target.successors(next_node) 
-                                    if n not in subgraph_nodes and n not in frontier])
-                else:
-                    frontier.extend([n for n in target.neighbors(next_node) 
-                                    if n not in subgraph_nodes and n not in frontier])
+                frontier.extend([n for n in target.neighbors(next_node) 
+                              if n not in subgraph_nodes and n not in frontier])
         
         sg = target.subgraph(subgraph_nodes)
         subgraphs.append(sg)
@@ -363,14 +322,8 @@ def count_graphlets(queries, targets, args):
         print(f"After sampling: {len(targets)} target graphs to process")
     
     # Pre-compute graph statistics
-    #target_stats = [compute_graph_stats(t) for t in targets]
-    #query_stats = [compute_graph_stats(q) for q in queries]
-    #changed to multiprocessing using 
-    with Pool(processes=args.n_workers) as pool:
-
-        target_stats = pool.starmap(compute_graph_stats, [(t, args) for t in targets])
-        
-        query_stats = pool.starmap(compute_graph_stats, [(q, args) for q in queries])
+    target_stats = [compute_graph_stats(t) for t in targets]
+    query_stats = [compute_graph_stats(q) for q in queries]
     
     # Generate work items with filtering
     inp = []
@@ -404,132 +357,66 @@ def count_graphlets(queries, targets, args):
                     
                 for anchor in anchors:
                     inp.append((i, query, target, args.count_method, args.node_anchored, anchor, 
-                             args.preserve_labels, args.timeout, args))
+                             args.preserve_labels, args.timeout))
             else:
                 inp.append((i, query, target, args.count_method, args.node_anchored, None, 
-                         args.preserve_labels, args.timeout, args))
+                         args.preserve_labels, args.timeout))
     
     print(f"Generated {len(inp)} tasks after filtering")
     n_done = 0
     last_checkpoint = time.time()
-   
-    with Pool(processes=args.n_workers) as pool:
-        for batch_start in range(0, len(inp), args.batch_size):
-            batch_end = min(batch_start + args.batch_size, len(inp))
-            batch = inp[batch_start:batch_end]
-
-            print(f"Processing batch {batch_start}-{batch_end} out of {len(inp)}")
-            batch_start_time = time.time()
-
-            results = pool.imap_unordered(count_graphlets_helper, batch)
-
-            for result in results:
-                if time.time() - batch_start_time > 3600:  # 1-hour batch timeout
-                    print(f"Batch {batch_start}-{batch_end} taking too long, marking remaining tasks problematic")
-                    # Mark remaining tasks
+    
+    # Process in batches with better error handling and stuck task detection
+    batch_size = args.batch_size
+    for batch_start in range(0, len(inp), batch_size):
+        batch_end = min(batch_start + batch_size, len(inp))
+        batch = inp[batch_start:batch_end]
+        
+        print(f"Processing batch {batch_start}-{batch_end} out of {len(inp)}")
+        batch_start_time = time.time()
+        
+        # Add an overall timeout for the entire batch
+        max_batch_time = 3600  # 1 hour max per batch
+        
+        with Pool(processes=args.n_workers) as pool:
+            for result in pool.imap_unordered(count_graphlets_helper, batch):
+                # Check if the entire batch is taking too long
+                if time.time() - batch_start_time > max_batch_time:
+                    print(f"Batch {batch_start}-{batch_end} taking too long, marking remaining tasks as problematic")
+                    # Mark remaining tasks as problematic
                     for task in batch:
-                        i = task[0]
-                        task_id = f"{i}_{batch_start}"
+                        i = task[0]  # Extract the task ID
+                        task_id = f"{i}_{batch_start}"  # Create task identifier
                         problematic_tasks.add(task_id)
                     break
-
+                    
                 i, n = result
                 n_matches[i] += n
                 n_done += 1
-
+                
+                # Print progress periodically
                 if n_done % 10 == 0:
-                    print(f"Processed {n_done}/{len(inp)} tasks, queries with matches: {sum(1 for v in n_matches.values() if v > 0)}/{len(n_matches)}", flush=True)
-
-                # Periodic checkpoint save
-                if time.time() - last_checkpoint > 300:
+                    print(f"Processed {n_done}/{len(inp)} tasks, queries with matches: {sum(1 for v in n_matches.values() if v > 0)}/{len(n_matches)}",
+                        flush=True)
+                
+                # Save checkpoint and problematic tasks periodically
+                if time.time() - last_checkpoint > 300:  # Every 5 minutes
                     save_checkpoint(n_matches, args.checkpoint_file)
                     with open(problematic_tasks_file, 'w') as f:
                         json.dump(list(problematic_tasks), f)
                     last_checkpoint = time.time()
-
-            # Save checkpoint after each batch
-            save_checkpoint(n_matches, args.checkpoint_file)
-            with open(problematic_tasks_file, 'w') as f:
-                json.dump(list(problematic_tasks), f)
-
+        
+        # Save checkpoint after each batch
+        save_checkpoint(n_matches, args.checkpoint_file)
+        with open(problematic_tasks_file, 'w') as f:
+            json.dump(list(problematic_tasks), f)
+    
     print("\nDone counting")
     return [n_matches[i] for i in range(len(queries))]
 
-
-#multiprocessing gen_baseline_queries ----------------
-def generate_one_baseline(args_tuple):
-    import networkx as nx
-    import random
-
-    i, query, targets, method, args = args_tuple
-
-    if len(query) == 0:
-        return query
-
-    MAX_ATTEMPTS = 100  # Avoid infinite loops
-
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            graph = random.choice(targets)
-            if graph.number_of_nodes() == 0:
-                continue
-
-            if method == "radial":
-                node = random.choice(list(graph.nodes))
-                neigh = list(nx.single_source_shortest_path_length(graph, node, cutoff=3).keys())
-                subgraph = graph.subgraph(neigh)
-                if subgraph.number_of_nodes() == 0:
-                    continue
-                if args.graph_type == "directed":
-                    largest_cc = max(nx.strongly_connected_components(subgraph), key=len)
-                else:
-                    largest_cc = max(nx.connected_components(subgraph), key=len)
-                neigh = subgraph.subgraph(largest_cc)
-                neigh = nx.convert_node_labels_to_integers(neigh)
-                if len(neigh) == len(query):
-                    return neigh
-
-            elif method == "tree":
-                start_node = random.choice(list(graph.nodes))
-                neigh = [start_node]
-                if args.graph_type == "directed":
-                    frontier = list(set(graph.successors(start_node)) - set(neigh))
-                else:
-                    frontier = list(set(graph.neighbors(start_node)) - set(neigh))
-                while len(neigh) < len(query) and frontier:
-                    new_node = random.choice(frontier)
-                    neigh.append(new_node)
-                    if args.graph_type == "directed":
-                        frontier += list(graph.successors(new_node))
-                    else:
-                        frontier += list(graph.neighbors(new_node))
-                    frontier = [x for x in frontier if x not in neigh]
-                if len(neigh) == len(query):
-                    sub = graph.subgraph(neigh)
-                    return nx.convert_node_labels_to_integers(sub)
-
-        except Exception as e:
-            continue  # Safe fallback on error
-
-    print(f"[WARN] Baseline not found for query {i} after {MAX_ATTEMPTS} attempts.")
-    return nx.Graph()  # Return empty graph if failed
-
-def convert_to_networkx(graph):
-    if isinstance(graph, nx.Graph) or isinstance(graph, nx.DiGraph):
-        return graph
-    return pyg_utils.to_networkx(graph).to_undirected()
-    
-def gen_baseline_queries(queries, targets, method="radial", node_anchored=False, args=None):
-    print(f"Generating {len(queries)} baseline queries in parallel using method: {method}")
-    args_list = [(i, query, targets, method, args) for i, query in enumerate(queries)]
-    # Use a specific number of processes to avoid overwhelming the system
-    with Pool(processes=min(os.cpu_count(), 8)) as pool:
-        results = pool.map(generate_one_baseline, args_list)
-    return results
-
-
-# The main logic should be inside a function that can be called from the __main__ block
-def run_analysis(args):
+def main():
+    global args
+    args = arg_parse()
     print("Using {} workers".format(args.n_workers))
     print("Baseline:", args.baseline)
     print(f"Max query size: {args.max_query_size}")
@@ -540,6 +427,7 @@ def run_analysis(args):
         print(f"Loading Networkx graph from {args.dataset}")
         try:
             graph = load_networkx_graph(args.dataset)
+            print(f"Loaded Networkx graph with {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges")
             dataset = [graph]
         except Exception as e:
             print(f"Error loading graph: {str(e)}")
@@ -580,9 +468,13 @@ def run_analysis(args):
             queries = [q for score, q in cand_patterns[10]][:200]
         dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
 
-    #call convert to graph function
-    with Pool(processes=args.n_workers) as pool:
-        targets = pool.map(convert_to_networkx, dataset)
+    # Convert dataset to networkx graphs
+    targets = []
+    for i in range(len(dataset)):
+        graph = dataset[i]
+        if not type(graph) == nx.Graph:
+            graph = pyg_utils.to_networkx(dataset[i]).to_undirected()
+        targets.append(graph)
 
     # Load query patterns
     if args.dataset != "analyze":
@@ -603,9 +495,8 @@ def run_analysis(args):
     else:
         # Generate baseline queries for comparison
         print(f"Generating baseline queries using {args.baseline}")
-        baseline_queries = gen_baseline_queries(
-    queries, targets, node_anchored=args.node_anchored, method=args.baseline, args=args
-)
+        baseline_queries = gen_baseline_queries(queries, targets,
+            node_anchored=args.node_anchored, method=args.baseline)
         query_lens = [len(q) for q in baseline_queries]
         n_matches = count_graphlets(baseline_queries, targets, args)
             
@@ -614,9 +505,54 @@ def run_analysis(args):
         json.dump((query_lens, n_matches, []), f)
     print(f"Results saved to {args.out_path}")
 
+def gen_baseline_queries(queries, targets, method="mfinder", node_anchored=False):
+    """Generate baseline queries for comparison."""
+    if method == "mfinder":
+        return utils.gen_baseline_queries_mfinder(queries, targets,
+            node_anchored=node_anchored)
+    elif method == "rand-esu":
+        return utils.gen_baseline_queries_rand_esu(queries, targets,
+            node_anchored=node_anchored)
+    
+    # Other methods implementation
+    neighs = []
+    for i, query in enumerate(queries):
+        print(i)
+        found = False
+        if len(query) == 0:
+            neighs.append(query)
+            found = True
+        while not found:
+            if method == "radial":
+                graph = random.choice(targets)
+                node = random.choice(list(graph.nodes))
+                neigh = list(nx.single_source_shortest_path_length(graph, node,
+                    cutoff=3).keys())
+                neigh = graph.subgraph(neigh)
+                neigh = neigh.subgraph(list(sorted(nx.connected_components(
+                    neigh), key=len))[-1])
+                neigh = nx.convert_node_labels_to_integers(neigh)
+                print(i, len(neigh), len(query))
+                if len(neigh) == len(query):
+                    neighs.append(neigh)
+                    found = True
+            elif method == "tree":
+                graph = random.choice(targets)
+                start_node = random.choice(list(graph.nodes))
+                neigh = [start_node]
+                frontier = list(set(graph.neighbors(start_node)) - set(neigh))
+                while len(neigh) < len(query) and frontier:
+                    new_node = random.choice(list(frontier))
+                    assert new_node not in neigh
+                    neigh.append(new_node)
+                    frontier += list(graph.neighbors(new_node))
+                    frontier = [x for x in frontier if x not in neigh]
+                if len(neigh) == len(query):
+                    neigh = graph.subgraph(neigh)
+                    neigh = nx.convert_node_labels_to_integers(neigh)
+                    neighs.append(neigh)
+                    found = True
+    return neighs
 
 if __name__ == "__main__":
-    # This code will ONLY run when the script is executed directly
-    # It will NOT run when imported by worker processes
-    args = arg_parse()
-    run_analysis(args)
+    main()

@@ -16,14 +16,6 @@ import warnings
 
 from common import feature_preprocess
 
-# import argparse
-# from subgraph_mining.config import parse_decoder
-# from subgraph_matching.config import parse_encoder
-
-# utils_parser = argparse.ArgumentParser(description='Decoder arguments')
-# parse_encoder(utils_parser)
-# parse_decoder(utils_parser)
-# utils_args = utils_parser.parse_args()
 
 def sample_neigh(graphs, size, graph_type):
     ps = np.array([len(g) for g in graphs], dtype=float)
@@ -164,7 +156,7 @@ def gen_baseline_queries_mfinder(queries, targets, n_samples=10000,
         print(size)
         counts = defaultdict(list)
         for i in tqdm(range(n_samples)):
-            graph, neigh = sample_neigh(targets, size)
+            graph, neigh = sample_neigh(targets, size, graph_type="undirected")
             v = neigh[0]
             neigh = graph.subgraph(neigh).copy()
             nx.set_node_attributes(neigh, 0, name="anchor")
@@ -240,22 +232,22 @@ def build_optimizer(args, params):
 def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     """
     Standardize graph attributes to ensure compatibility with DeepSnap.
-    Handles both undirected and directed NetworkX graphs.
     
     Args:
-        graph: Input NetworkX graph (can be nx.Graph or nx.DiGraph)
+        graph: Input NetworkX graph
         anchor: Optional anchor node index
         
     Returns:
         NetworkX graph with standardized attributes
     """
-    # Detect graph type and create the same type
     if isinstance(graph, nx.DiGraph):
         g = nx.DiGraph()
     else:
         g = nx.Graph()
+
     g.add_nodes_from(graph.nodes())
     g.add_edges_from(graph.edges())
+   # g = graph.copy()
     
     # Standardize edge attributes
     for u, v in g.edges():
@@ -291,6 +283,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         if anchor is not None:
             node_data['node_feature'] = torch.tensor([float(node == anchor)])
         elif 'node_feature' not in node_data:
+            # Default feature if no anchor specified
             node_data['node_feature'] = torch.tensor([1.0])
             
         # Ensure label exists
