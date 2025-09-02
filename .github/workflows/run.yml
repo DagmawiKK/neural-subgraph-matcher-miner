@@ -100,8 +100,7 @@ jobs:
               python -m analyze.count_patterns \
                 --dataset=graph.pkl \
                 --out_path=results/counts.json \
-                --node_anchored \
-                --preserve_labels
+                --node_anchored
               echo 'Counting completed.'
               ls -la /app/results
             "
