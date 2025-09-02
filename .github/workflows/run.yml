@@ -87,6 +87,7 @@ jobs:
               ls -la /app/results
               "
 
+
       - name: Run pattern counter in Docker container
         run: |
           docker run --rm \
@@ -100,8 +101,8 @@ jobs:
               python -m analyze.count_patterns \
                 --dataset=metta.pkl \
                 --queries_path=results/patterns.pkl \
-                --out_path=results/counts.json \
-                --node_anchored
+                --out_path=results/ \
+                --node_anchored 
               echo 'Counting completed.'
               ls -la /app/results
             "
